@@ -287,6 +287,110 @@ body {
     gap: 20px;
 }
 
+/* ---------- System Info Banner ---------- */
+.system-banner {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    padding: 14px 20px;
+    background: var(--bg-white);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 20px;
+    border-left: 4px solid var(--color-primary);
+}
+
+.sys-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.sys-item i {
+    color: var(--color-primary);
+    width: 16px;
+    text-align: center;
+}
+
+.sys-item span {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+/* ---------- Gauge Grid ---------- */
+.gauge-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.gauge-card .card-body {
+    padding: 20px;
+}
+
+.gauge-body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+
+.gauge-ring {
+    position: relative;
+    width: 100px;
+    height: 100px;
+}
+
+.gauge-ring svg {
+    width: 100%;
+    height: 100%;
+    transform: rotate(-90deg);
+}
+
+.gauge-bg {
+    fill: none;
+    stroke: #e5e7eb;
+    stroke-width: 10;
+}
+
+.gauge-fill {
+    fill: none;
+    stroke-width: 10;
+    stroke-linecap: round;
+    stroke-dasharray: 326.73; /* 2 * PI * 52 */
+    stroke-dashoffset: 326.73;
+    transition: stroke-dashoffset 0.8s ease;
+}
+
+.gauge-cpu { stroke: var(--color-primary); }
+.gauge-mem { stroke: var(--color-teal); }
+
+.gauge-text {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.gauge-sub {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+}
+
+.net-stat-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
 /* ---------- Cards ---------- */
 .card {
     background: var(--bg-white);
@@ -621,6 +725,9 @@ body {
 @media (max-width: 1024px) {
     .dashboard-grid {
         grid-template-columns: 1fr;
+    }
+    .gauge-grid {
+        grid-template-columns: repeat(2, 1fr);
     }
 }
 

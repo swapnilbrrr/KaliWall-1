@@ -63,6 +63,15 @@
 
         <!-- ===== DASHBOARD PAGE ===== -->
         <section class="page active" id="page-dashboard">
+
+            <!-- System Info Banner -->
+            <div class="system-banner" id="systemBanner">
+                <div class="sys-item"><i class="fa-solid fa-server"></i> <span id="sysHostname">--</span></div>
+                <div class="sys-item"><i class="fa-brands fa-linux"></i> <span id="sysKernel">--</span></div>
+                <div class="sys-item"><i class="fa-solid fa-clock"></i> Uptime: <span id="sysUptime">--</span></div>
+                <div class="sys-item"><i class="fa-solid fa-weight-hanging"></i> Load: <span id="sysLoad">--</span></div>
+            </div>
+
             <!-- Stat Cards -->
             <div class="stats-grid">
                 <div class="stat-card">
@@ -99,6 +108,61 @@
                         <span class="stat-value" id="statConnections">0</span>
                         <span class="stat-label">Active Connections</span>
                     </div>
+                </div>
+            </div>
+
+            <!-- Resource Gauges -->
+            <div class="gauge-grid">
+                <div class="card gauge-card">
+                    <div class="card-header"><i class="fa-solid fa-microchip"></i><h3>CPU Usage</h3></div>
+                    <div class="card-body gauge-body">
+                        <div class="gauge-ring">
+                            <svg viewBox="0 0 120 120">
+                                <circle class="gauge-bg" cx="60" cy="60" r="52"/>
+                                <circle class="gauge-fill gauge-cpu" id="gaugeCPU" cx="60" cy="60" r="52"/>
+                            </svg>
+                            <span class="gauge-text" id="gaugeCPUText">0%</span>
+                        </div>
+                        <span class="gauge-sub" id="gaugeCPUCores">0 cores</span>
+                    </div>
+                </div>
+                <div class="card gauge-card">
+                    <div class="card-header"><i class="fa-solid fa-memory"></i><h3>Memory Usage</h3></div>
+                    <div class="card-body gauge-body">
+                        <div class="gauge-ring">
+                            <svg viewBox="0 0 120 120">
+                                <circle class="gauge-bg" cx="60" cy="60" r="52"/>
+                                <circle class="gauge-fill gauge-mem" id="gaugeMem" cx="60" cy="60" r="52"/>
+                            </svg>
+                            <span class="gauge-text" id="gaugeMemText">0%</span>
+                        </div>
+                        <span class="gauge-sub" id="gaugeMemDetail">0 / 0 MB</span>
+                    </div>
+                </div>
+                <div class="card gauge-card">
+                    <div class="card-header"><i class="fa-solid fa-arrow-down"></i><h3>Network RX</h3></div>
+                    <div class="card-body gauge-body">
+                        <span class="net-stat-value" id="netRxValue">0 B</span>
+                        <span class="gauge-sub">Total received</span>
+                    </div>
+                </div>
+                <div class="card gauge-card">
+                    <div class="card-header"><i class="fa-solid fa-arrow-up"></i><h3>Network TX</h3></div>
+                    <div class="card-body gauge-body">
+                        <span class="net-stat-value" id="netTxValue">0 B</span>
+                        <span class="gauge-sub">Total sent</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Network Interfaces -->
+            <div class="card" style="margin-bottom:20px">
+                <div class="card-header"><i class="fa-solid fa-ethernet"></i><h3>Network Interfaces</h3></div>
+                <div class="card-body table-responsive">
+                    <table class="table" id="ifacesTable">
+                        <thead><tr><th>Interface</th><th>Addresses</th><th>RX</th><th>TX</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
                 </div>
             </div>
 

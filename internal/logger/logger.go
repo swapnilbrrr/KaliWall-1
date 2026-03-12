@@ -101,25 +101,3 @@ func (tl *TrafficLogger) TodayCounts() (blocked int, allowed int) {
 	return
 }
 
-// GenerateDemoLogs creates sample log entries for the demo UI.
-func (tl *TrafficLogger) GenerateDemoLogs() {
-	demoEntries := []struct {
-		action, src, dst, proto, detail string
-	}{
-		{"ALLOW", "192.168.1.50", "192.168.1.10", "tcp", "SSH connection established on port 22"},
-		{"ALLOW", "10.0.0.5", "192.168.1.10", "tcp", "HTTPS request to port 443"},
-		{"BLOCK", "45.33.32.156", "192.168.1.10", "tcp", "Blocked incoming Telnet on port 23"},
-		{"ALLOW", "192.168.1.10", "8.8.8.8", "udp", "DNS query to port 53"},
-		{"BLOCK", "103.21.244.0", "192.168.1.10", "tcp", "Blocked RDP attempt on port 3389"},
-		{"ALLOW", "172.16.0.3", "192.168.1.10", "tcp", "HTTP request to port 80"},
-		{"BLOCK", "185.220.101.1", "192.168.1.10", "tcp", "Dropped port scan on port 445"},
-		{"ALLOW", "10.0.0.12", "192.168.1.10", "tcp", "MySQL connection on port 3306"},
-		{"ALLOW", "192.168.1.10", "1.1.1.1", "udp", "DNS query to port 53"},
-		{"BLOCK", "91.240.118.0", "192.168.1.10", "tcp", "Blocked brute-force SSH on port 22"},
-		{"ALLOW", "192.168.1.100", "192.168.1.10", "icmp", "Ping request"},
-		{"BLOCK", "198.51.100.0", "192.168.1.10", "tcp", "Dropped connection on port 8443"},
-	}
-	for _, d := range demoEntries {
-		tl.Log(d.action, d.src, d.dst, d.proto, d.detail)
-	}
-}

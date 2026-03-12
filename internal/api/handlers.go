@@ -10,14 +10,12 @@ import (
 	"kaliwall/internal/firewall"
 	"kaliwall/internal/logger"
 	"kaliwall/internal/models"
+	"kaliwall/internal/sysinfo"
 )
 
 // NewRouter creates the HTTP mux with all API routes and static file serving.
 func NewRouter(fw *firewall.Engine, tl *logger.TrafficLogger) http.Handler {
 	mux := http.NewServeMux()
-
-	// Generate demo log entries for the UI
-	tl.GenerateDemoLogs()
 
 	h := &handlers{fw: fw, logger: tl}
 
@@ -25,6 +23,7 @@ func NewRouter(fw *firewall.Engine, tl *logger.TrafficLogger) http.Handler {
 	mux.HandleFunc("/api/v1/rules", h.handleRules)
 	mux.HandleFunc("/api/v1/rules/", h.handleRuleByID)  // /api/v1/rules/{id}
 	mux.HandleFunc("/api/v1/stats", h.handleStats)
+	mux.HandleFunc("/api/v1/sysinfo", h.handleSysInfo)
 	mux.HandleFunc("/api/v1/connections", h.handleConnections)
 	mux.HandleFunc("/api/v1/logs", h.handleLogs)
 
@@ -143,6 +142,16 @@ func (h *handlers) handleStats(w http.ResponseWriter, r *http.Request) {
 	}
 	stats := h.fw.Stats()
 	respond(w, http.StatusOK, models.APIResponse{Success: true, Data: stats})
+}
+
+// handleSysInfo returns detailed real-time system information.
+func (h *handlers) handleSysInfo(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	si := sysinfo.Gather()
+	respond(w, http.StatusOK, models.APIResponse{Success: true, Data: si})
 }
 
 // handleConnections returns active network connections.

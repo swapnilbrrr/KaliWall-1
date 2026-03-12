@@ -76,7 +76,8 @@ KaliWall/
 | DELETE | `/api/v1/rules/{id}`   | Delete a rule             |
 | PATCH  | `/api/v1/rules/{id}`   | Toggle rule enabled state |
 | GET    | `/api/v1/stats`        | Dashboard statistics      |
-| GET    | `/api/v1/connections`  | Active TCP connections    |
+| GET    | `/api/v1/sysinfo`      | Real-time OS system info  |
+| GET    | `/api/v1/connections`  | Active TCP/UDP connections|
 | GET    | `/api/v1/logs?limit=N` | Recent traffic log entries|
 
 ### Example: Add a Rule

@@ -53,11 +53,26 @@ type Connection struct {
 
 // DashboardStats holds summary statistics for the web UI dashboard.
 type DashboardStats struct {
-	TotalRules        int `json:"total_rules"`
-	ActiveRules       int `json:"active_rules"`
-	BlockedToday      int `json:"blocked_today"`
-	AllowedToday      int `json:"allowed_today"`
-	ActiveConnections int `json:"active_connections"`
+	TotalRules        int     `json:"total_rules"`
+	ActiveRules       int     `json:"active_rules"`
+	BlockedToday      int     `json:"blocked_today"`
+	AllowedToday      int     `json:"allowed_today"`
+	ActiveConnections int     `json:"active_connections"`
+	Hostname          string  `json:"hostname"`
+	OS                string  `json:"os"`
+	Kernel            string  `json:"kernel"`
+	Uptime            string  `json:"uptime"`
+	UptimeSec         float64 `json:"uptime_seconds"`
+	CPUUsage          float64 `json:"cpu_usage_percent"`
+	CPUCores          int     `json:"cpu_cores"`
+	MemTotal          uint64  `json:"mem_total_bytes"`
+	MemUsed           uint64  `json:"mem_used_bytes"`
+	MemPercent        float64 `json:"mem_usage_percent"`
+	SwapTotal         uint64  `json:"swap_total_bytes"`
+	SwapUsed          uint64  `json:"swap_used_bytes"`
+	LoadAvg           string  `json:"load_average"`
+	NetRxBytes        uint64  `json:"net_rx_bytes"`
+	NetTxBytes        uint64  `json:"net_tx_bytes"`
 }
 
 // APIResponse wraps all API responses with a consistent envelope.

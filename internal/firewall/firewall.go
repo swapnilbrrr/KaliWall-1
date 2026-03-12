@@ -18,6 +18,7 @@ import (
 
 	"kaliwall/internal/logger"
 	"kaliwall/internal/models"
+	"kaliwall/internal/sysinfo"
 )
 
 // Engine is the core firewall management component.
@@ -166,7 +167,7 @@ func (e *Engine) GetRule(id string) (models.Rule, error) {
 
 // ---------- Statistics ----------
 
-// Stats computes dashboard statistics.
+// Stats computes dashboard statistics including real OS metrics.
 func (e *Engine) Stats() models.DashboardStats {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
@@ -181,23 +182,62 @@ func (e *Engine) Stats() models.DashboardStats {
 	blocked, allowed := e.logger.TodayCounts()
 	conns := len(e.ActiveConnections())
 
+	// Gather real OS system info
+	si := sysinfo.Gather()
+
 	return models.DashboardStats{
 		TotalRules:        len(e.rules),
 		ActiveRules:       active,
 		BlockedToday:      blocked,
 		AllowedToday:      allowed,
 		ActiveConnections: conns,
+		Hostname:          si.Hostname,
+		OS:                si.OS,
+		Kernel:            si.Kernel,
+		Uptime:            si.Uptime,
+		UptimeSec:         si.UptimeSec,
+		CPUUsage:          si.CPUUsage,
+		CPUCores:          si.CPUCores,
+		MemTotal:          si.MemTotal,
+		MemUsed:           si.MemUsed,
+		MemPercent:        si.MemPercent,
+		SwapTotal:         si.SwapTotal,
+		SwapUsed:          si.SwapUsed,
+		LoadAvg:           si.LoadAvg,
+		NetRxBytes:        si.NetRxBytes,
+		NetTxBytes:        si.NetTxBytes,
 	}
 }
 
-// ActiveConnections reads /proc/net/tcp to list active TCP connections.
+// ActiveConnections reads /proc/net/tcp, tcp6, and udp to list real connections.
 func (e *Engine) ActiveConnections() []models.Connection {
 	conns := make([]models.Connection, 0)
 
-	file, err := os.Open("/proc/net/tcp")
+	// Read TCP, TCP6, and UDP from /proc/net
+	procFiles := []struct {
+		path     string
+		protocol string
+	}{
+		{"/proc/net/tcp", "tcp"},
+		{"/proc/net/tcp6", "tcp6"},
+		{"/proc/net/udp", "udp"},
+		{"/proc/net/udp6", "udp6"},
+	}
+
+	for _, pf := range procFiles {
+		parsed := parseProcNet(pf.path, pf.protocol)
+		conns = append(conns, parsed...)
+	}
+
+	return conns
+}
+
+// parseProcNet reads a /proc/net/* file and returns parsed connections.
+func parseProcNet(path, protocol string) []models.Connection {
+	var conns []models.Connection
+	file, err := os.Open(path)
 	if err != nil {
-		// Not on Linux or no access — return demo data
-		return demoConnections()
+		return conns
 	}
 	defer file.Close()
 
@@ -216,7 +256,7 @@ func (e *Engine) ActiveConnections() []models.Connection {
 		state := tcpState(fields[3])
 
 		conns = append(conns, models.Connection{
-			Protocol:   "tcp",
+			Protocol:   protocol,
 			LocalIP:    localIP,
 			LocalPort:  localPort,
 			RemoteIP:   remoteIP,
@@ -402,14 +442,3 @@ func tcpState(hex string) string {
 	return hex
 }
 
-// demoConnections returns placeholder connection data for non-Linux systems.
-func demoConnections() []models.Connection {
-	return []models.Connection{
-		{Protocol: "tcp", LocalIP: "0.0.0.0", LocalPort: "8080", RemoteIP: "0.0.0.0", RemotePort: "0", State: "LISTEN"},
-		{Protocol: "tcp", LocalIP: "192.168.1.10", LocalPort: "22", RemoteIP: "192.168.1.50", RemotePort: "54312", State: "ESTABLISHED"},
-		{Protocol: "tcp", LocalIP: "192.168.1.10", LocalPort: "443", RemoteIP: "10.0.0.5", RemotePort: "61024", State: "ESTABLISHED"},
-		{Protocol: "tcp", LocalIP: "192.168.1.10", LocalPort: "80", RemoteIP: "172.16.0.3", RemotePort: "49871", State: "TIME_WAIT"},
-		{Protocol: "tcp", LocalIP: "192.168.1.10", LocalPort: "3306", RemoteIP: "10.0.0.12", RemotePort: "52100", State: "ESTABLISHED"},
-		{Protocol: "tcp", LocalIP: "0.0.0.0", LocalPort: "53", RemoteIP: "0.0.0.0", RemotePort: "0", State: "LISTEN"},
-	}
-}

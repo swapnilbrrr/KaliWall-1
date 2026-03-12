@@ -43,6 +43,7 @@
         switch (page) {
             case "dashboard":
                 loadStats();
+                loadSysInfo();
                 loadDashboardLogs();
                 loadDashboardConnections();
                 break;
@@ -69,12 +70,81 @@
         const res = await apiFetch("/stats");
         if (!res.success) return;
         const d = res.data;
+
+        // Firewall stat cards
         document.getElementById("statTotalRules").textContent = d.total_rules;
         document.getElementById("statActiveRules").textContent = d.active_rules;
         document.getElementById("statBlocked").textContent = d.blocked_today;
         document.getElementById("statAllowed").textContent = d.allowed_today;
         document.getElementById("statConnections").textContent = d.active_connections;
         document.querySelector("#ruleCount span").textContent = d.active_rules;
+
+        // System info banner
+        document.getElementById("sysHostname").textContent = d.hostname || "--";
+        document.getElementById("sysKernel").textContent = d.kernel || "--";
+        document.getElementById("sysUptime").textContent = d.uptime || "--";
+        document.getElementById("sysLoad").textContent = d.load_average || "--";
+
+        // CPU gauge
+        var cpuPct = d.cpu_usage_percent || 0;
+        setGauge("gaugeCPU", "gaugeCPUText", cpuPct);
+        document.getElementById("gaugeCPUCores").textContent = (d.cpu_cores || 0) + " cores";
+
+        // Memory gauge
+        var memPct = d.mem_usage_percent || 0;
+        setGauge("gaugeMem", "gaugeMemText", memPct);
+        var memUsedMB = ((d.mem_used_bytes || 0) / 1048576).toFixed(0);
+        var memTotalMB = ((d.mem_total_bytes || 0) / 1048576).toFixed(0);
+        document.getElementById("gaugeMemDetail").textContent = memUsedMB + " / " + memTotalMB + " MB";
+
+        // Network totals
+        document.getElementById("netRxValue").textContent = formatBytes(d.net_rx_bytes || 0);
+        document.getElementById("netTxValue").textContent = formatBytes(d.net_tx_bytes || 0);
+    }
+
+    // Set a circular SVG gauge by percentage (0-100).
+    function setGauge(circleId, textId, percent) {
+        var circumference = 2 * Math.PI * 52; // r=52
+        var offset = circumference - (percent / 100) * circumference;
+        var circle = document.getElementById(circleId);
+        if (circle) circle.style.strokeDashoffset = offset;
+        var text = document.getElementById(textId);
+        if (text) text.textContent = percent.toFixed(1) + "%";
+    }
+
+    // Format bytes into human-readable string.
+    function formatBytes(bytes) {
+        if (bytes === 0) return "0 B";
+        var units = ["B", "KB", "MB", "GB", "TB"];
+        var i = Math.floor(Math.log(bytes) / Math.log(1024));
+        if (i >= units.length) i = units.length - 1;
+        return (bytes / Math.pow(1024, i)).toFixed(1) + " " + units[i];
+    }
+
+    // Load detailed system info including network interfaces.
+    async function loadSysInfo() {
+        const res = await apiFetch("/sysinfo");
+        if (!res.success) return;
+        const si = res.data;
+
+        // Populate interfaces table
+        var tbody = document.querySelector("#ifacesTable tbody");
+        if (!tbody) return;
+        tbody.innerHTML = "";
+        if (si.interfaces && si.interfaces.length > 0) {
+            si.interfaces.forEach(function (iface) {
+                var tr = document.createElement("tr");
+                var addrs = (iface.addresses || []).map(escapeHtml).join(", ") || "none";
+                tr.innerHTML =
+                    "<td><strong>" + escapeHtml(iface.name) + "</strong></td>" +
+                    "<td>" + addrs + "</td>" +
+                    "<td>" + formatBytes(iface.rx_bytes || 0) + "</td>" +
+                    "<td>" + formatBytes(iface.tx_bytes || 0) + "</td>";
+                tbody.appendChild(tr);
+            });
+        } else {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#9ca3af">No network interfaces detected</td></tr>';
+        }
     }
 
     async function loadDashboardLogs() {
