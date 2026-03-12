@@ -269,6 +269,4 @@ curl http://localhost:8080/api/v1/rules | jq
 - **Go 1.21+**
 - **Root access** (for live firewall rule application)
 
-## License
-
-MIT
+## Open-Source
