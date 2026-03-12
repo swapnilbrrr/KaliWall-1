@@ -15,9 +15,11 @@ import (
 
 // TrafficLogger writes structured log entries to a file.
 type TrafficLogger struct {
-	mu      sync.Mutex
-	file    *os.File
-	entries []models.TrafficEntry // in-memory buffer for API queries
+	mu          sync.Mutex
+	file        *os.File
+	entries     []models.TrafficEntry // in-memory buffer for API queries
+	subscribers map[uint64]chan models.TrafficEntry
+	nextSubID   uint64
 }
 
 // New opens (or creates) the log file and returns a TrafficLogger.
@@ -27,8 +29,9 @@ func New(path string) (*TrafficLogger, error) {
 		return nil, fmt.Errorf("open log file: %w", err)
 	}
 	tl := &TrafficLogger{
-		file:    f,
-		entries: make([]models.TrafficEntry, 0, 1024),
+		file:        f,
+		entries:     make([]models.TrafficEntry, 0, 1024),
+		subscribers: make(map[uint64]chan models.TrafficEntry),
 	}
 	tl.Log("SYSTEM", "-", "-", "-", "KaliWall daemon started")
 	return tl, nil
@@ -64,6 +67,14 @@ func (tl *TrafficLogger) Log(action, srcIP, dstIP, protocol, detail string) {
 		tl.entries = tl.entries[1:]
 	}
 	tl.entries = append(tl.entries, entry)
+
+	// Notify live subscribers (non-blocking)
+	for _, ch := range tl.subscribers {
+		select {
+		case ch <- entry:
+		default:
+		}
+	}
 }
 
 // RecentEntries returns the last n log entries.
@@ -99,5 +110,29 @@ func (tl *TrafficLogger) TodayCounts() (blocked int, allowed int) {
 		}
 	}
 	return
+}
+
+// Subscribe registers a channel to receive new log entries in real-time.
+// Returns a subscription ID for unsubscribing.
+func (tl *TrafficLogger) Subscribe() (uint64, chan models.TrafficEntry) {
+	tl.mu.Lock()
+	defer tl.mu.Unlock()
+
+	tl.nextSubID++
+	id := tl.nextSubID
+	ch := make(chan models.TrafficEntry, 64)
+	tl.subscribers[id] = ch
+	return id, ch
+}
+
+// Unsubscribe removes a subscriber and closes its channel.
+func (tl *TrafficLogger) Unsubscribe(id uint64) {
+	tl.mu.Lock()
+	defer tl.mu.Unlock()
+
+	if ch, ok := tl.subscribers[id]; ok {
+		close(ch)
+		delete(tl.subscribers, id)
+	}
 }
 

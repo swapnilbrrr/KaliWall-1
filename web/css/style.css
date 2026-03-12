@@ -752,3 +752,53 @@ body {
         grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
     }
 }
+
+/* ---------- Live Log Indicator ---------- */
+.toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.live-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #1e8e3e;
+    letter-spacing: 0.5px;
+}
+
+.live-dot {
+    font-size: 8px;
+    animation: livePulse 1.2s ease-in-out infinite;
+}
+
+.live-indicator.paused {
+    color: var(--text-secondary);
+}
+
+.live-indicator.paused .live-dot {
+    animation: none;
+}
+
+@keyframes livePulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.2; }
+}
+
+.log-container {
+    max-height: 72vh;
+    overflow-y: auto;
+}
+
+/* New row highlight flash */
+@keyframes logFlash {
+    0%   { background: #e8f0fe; }
+    100% { background: transparent; }
+}
+
+.table tbody tr.log-new {
+    animation: logFlash 1.2s ease-out;
+}

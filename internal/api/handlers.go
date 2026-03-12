@@ -3,6 +3,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -26,6 +27,7 @@ func NewRouter(fw *firewall.Engine, tl *logger.TrafficLogger) http.Handler {
 	mux.HandleFunc("/api/v1/sysinfo", h.handleSysInfo)
 	mux.HandleFunc("/api/v1/connections", h.handleConnections)
 	mux.HandleFunc("/api/v1/logs", h.handleLogs)
+	mux.HandleFunc("/api/v1/logs/stream", h.handleLogStream)
 
 	// Serve web UI from the "web" directory
 	fs := http.FileServer(http.Dir("web"))
@@ -178,6 +180,37 @@ func (h *handlers) handleLogs(w http.ResponseWriter, r *http.Request) {
 	}
 	entries := h.logger.RecentEntries(n)
 	respond(w, http.StatusOK, models.APIResponse{Success: true, Data: entries})
+}
+
+// handleLogStream provides a Server-Sent Events (SSE) stream of real-time log entries.
+func (h *handlers) handleLogStream(w http.ResponseWriter, r *http.Request) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Streaming not supported", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+
+	subID, ch := h.logger.Subscribe()
+	defer h.logger.Unsubscribe(subID)
+
+	ctx := r.Context()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case entry, ok := <-ch:
+			if !ok {
+				return
+			}
+			data, _ := json.Marshal(entry)
+			fmt.Fprintf(w, "event: log\ndata: %s\n\n", data)
+			flusher.Flush()
+		}
+	}
 }
 
 // ---------- Helpers ----------

@@ -13,6 +13,7 @@ import (
 	"kaliwall/internal/api"
 	"kaliwall/internal/firewall"
 	"kaliwall/internal/logger"
+	"kaliwall/internal/netmon"
 )
 
 const (
@@ -44,6 +45,10 @@ func main() {
 	// Load sample rules for demo purposes
 	fw.LoadSampleRules()
 
+	// Start real-time network monitor
+	monitor := netmon.New(trafficLogger)
+	monitor.Start()
+
 	// Initialize REST API and web server
 	handler := api.NewRouter(fw, trafficLogger)
 
@@ -63,5 +68,6 @@ func main() {
 
 	<-stop
 	fmt.Println("\n[*] Shutting down KaliWall daemon...")
+	monitor.Stop()
 	trafficLogger.Log("SYSTEM", "-", "-", "-", "Daemon stopped")
 }

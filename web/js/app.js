@@ -31,6 +31,8 @@
             document.getElementById("page-" + target).classList.add("active");
             pageTitle.textContent = pageTitles[target] || "KaliWall";
             sidebar.classList.remove("open");
+            // Stop log stream when leaving the logs page
+            if (target !== "logs") stopLogStream();
             loadPageData(target);
         });
     });
@@ -227,24 +229,89 @@
         });
     }
 
-    // ---------- Logs ----------
+    // ---------- Logs (Real-time SSE) ----------
+
+    var logEventSource = null;
+    var logLive = true;     // live vs paused
+    var maxLogRows = 500;   // cap DOM rows
+
+    function startLogStream() {
+        stopLogStream();
+        logLive = true;
+        updateLiveUI();
+
+        logEventSource = new EventSource(API + "/logs/stream");
+
+        logEventSource.addEventListener("log", function (e) {
+            if (!logLive) return;
+            try {
+                var entry = JSON.parse(e.data);
+                prependLogRow(entry, true);
+            } catch (_) {}
+        });
+
+        logEventSource.onerror = function () {
+            // Browser will auto-reconnect; just update indicator briefly
+            var ind = document.getElementById("liveIndicator");
+            if (ind) ind.classList.add("paused");
+            setTimeout(function () {
+                if (logLive && ind) ind.classList.remove("paused");
+            }, 2000);
+        };
+    }
+
+    function stopLogStream() {
+        if (logEventSource) {
+            logEventSource.close();
+            logEventSource = null;
+        }
+    }
+
+    function prependLogRow(entry, animate) {
+        var tbody = document.querySelector("#logsTable tbody");
+        if (!tbody) return;
+        var tr = document.createElement("tr");
+        if (animate) tr.className = "log-new";
+        tr.innerHTML =
+            "<td>" + formatTime(entry.timestamp) + "</td>" +
+            "<td>" + actionBadge(entry.action) + "</td>" +
+            "<td>" + escapeHtml(entry.src_ip) + "</td>" +
+            "<td>" + escapeHtml(entry.dst_ip) + "</td>" +
+            "<td>" + escapeHtml(entry.protocol) + "</td>" +
+            "<td>" + escapeHtml(entry.detail) + "</td>";
+        tbody.insertBefore(tr, tbody.firstChild);
+        // Trim excess rows
+        while (tbody.children.length > maxLogRows) {
+            tbody.removeChild(tbody.lastChild);
+        }
+    }
+
+    function updateLiveUI() {
+        var ind = document.getElementById("liveIndicator");
+        var icon = document.getElementById("liveToggleIcon");
+        var text = document.getElementById("liveToggleText");
+        if (logLive) {
+            if (ind) ind.classList.remove("paused");
+            if (icon) icon.className = "fa-solid fa-pause";
+            if (text) text.textContent = "Pause";
+        } else {
+            if (ind) ind.classList.add("paused");
+            if (icon) icon.className = "fa-solid fa-play";
+            if (text) text.textContent = "Resume";
+        }
+    }
 
     async function loadLogs() {
+        // Load historical logs first, then start SSE stream
         const res = await apiFetch("/logs?limit=200");
-        if (!res.success) return;
-        const tbody = document.querySelector("#logsTable tbody");
-        tbody.innerHTML = "";
-        res.data.forEach((entry) => {
-            const tr = document.createElement("tr");
-            tr.innerHTML =
-                "<td>" + formatTime(entry.timestamp) + "</td>" +
-                "<td>" + actionBadge(entry.action) + "</td>" +
-                "<td>" + escapeHtml(entry.src_ip) + "</td>" +
-                "<td>" + escapeHtml(entry.dst_ip) + "</td>" +
-                "<td>" + escapeHtml(entry.protocol) + "</td>" +
-                "<td>" + escapeHtml(entry.detail) + "</td>";
-            tbody.appendChild(tr);
-        });
+        if (res.success) {
+            const tbody = document.querySelector("#logsTable tbody");
+            tbody.innerHTML = "";
+            res.data.forEach(function (entry) {
+                prependLogRow(entry, false);
+            });
+        }
+        startLogStream();
     }
 
     // ---------- Rule CRUD ----------
@@ -333,6 +400,17 @@
 
     document.getElementById("btnRefreshConn").addEventListener("click", () => loadConnections());
     document.getElementById("btnRefreshLogs").addEventListener("click", () => loadLogs());
+
+    document.getElementById("btnToggleLive").addEventListener("click", function () {
+        logLive = !logLive;
+        updateLiveUI();
+        if (logLive && !logEventSource) startLogStream();
+    });
+
+    document.getElementById("btnClearLogs").addEventListener("click", function () {
+        var tbody = document.querySelector("#logsTable tbody");
+        if (tbody) tbody.innerHTML = "";
+    });
 
     // ---------- Helpers ----------
 

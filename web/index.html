@@ -253,12 +253,23 @@
         <section class="page" id="page-logs">
             <div class="page-toolbar">
                 <h2>Traffic Logs</h2>
-                <button class="btn btn-secondary" id="btnRefreshLogs">
-                    <i class="fa-solid fa-arrows-rotate"></i> Refresh
-                </button>
+                <div class="toolbar-actions">
+                    <span class="live-indicator" id="liveIndicator">
+                        <i class="fa-solid fa-circle live-dot"></i> LIVE
+                    </span>
+                    <button class="btn btn-secondary" id="btnToggleLive" title="Pause/resume live feed">
+                        <i class="fa-solid fa-pause" id="liveToggleIcon"></i> <span id="liveToggleText">Pause</span>
+                    </button>
+                    <button class="btn btn-secondary" id="btnClearLogs" title="Clear log display">
+                        <i class="fa-solid fa-eraser"></i> Clear
+                    </button>
+                    <button class="btn btn-secondary" id="btnRefreshLogs">
+                        <i class="fa-solid fa-arrows-rotate"></i> Refresh
+                    </button>
+                </div>
             </div>
             <div class="card">
-                <div class="card-body table-responsive">
+                <div class="card-body table-responsive log-container" id="logContainer">
                     <table class="table" id="logsTable">
                         <thead>
                             <tr><th>Timestamp</th><th>Action</th><th>Source IP</th><th>Dest IP</th><th>Protocol</th><th>Detail</th></tr>
