@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KaliWall &mdash; Firewall Management</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<!-- Sidebar Navigation -->
+<aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+        <i class="fa-solid fa-shield-halved sidebar-logo"></i>
+        <span class="sidebar-title">KaliWall</span>
+    </div>
+    <nav class="sidebar-nav">
+        <a href="#" class="nav-item active" data-page="dashboard">
+            <i class="fa-solid fa-gauge-high"></i><span>Dashboard</span>
+        </a>
+        <a href="#" class="nav-item" data-page="rules">
+            <i class="fa-solid fa-list-check"></i><span>Firewall Rules</span>
+        </a>
+        <a href="#" class="nav-item" data-page="connections">
+            <i class="fa-solid fa-network-wired"></i><span>Connections</span>
+        </a>
+        <a href="#" class="nav-item" data-page="logs">
+            <i class="fa-solid fa-file-lines"></i><span>Traffic Logs</span>
+        </a>
+    </nav>
+    <div class="sidebar-footer">
+        <div class="system-status">
+            <i class="fa-solid fa-circle status-dot"></i>
+            <span>System Active</span>
+        </div>
+    </div>
+</aside>
+
+<!-- Main Content -->
+<main class="main-content">
+
+    <!-- Top Bar -->
+    <header class="topbar">
+        <button class="menu-toggle" id="menuToggle">
+            <i class="fa-solid fa-bars"></i>
+        </button>
+        <h1 class="page-title" id="pageTitle">Dashboard</h1>
+        <div class="topbar-actions">
+            <span class="topbar-badge" id="ruleCount" title="Active rules">
+                <i class="fa-solid fa-shield"></i> <span>0</span>
+            </span>
+            <button class="btn btn-sm btn-refresh" id="btnRefresh" title="Refresh data">
+                <i class="fa-solid fa-arrows-rotate"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Pages -->
+    <div class="page-container">
+
+        <!-- ===== DASHBOARD PAGE ===== -->
+        <section class="page active" id="page-dashboard">
+            <!-- Stat Cards -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon bg-blue"><i class="fa-solid fa-list"></i></div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="statTotalRules">0</span>
+                        <span class="stat-label">Total Rules</span>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon bg-green"><i class="fa-solid fa-toggle-on"></i></div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="statActiveRules">0</span>
+                        <span class="stat-label">Active Rules</span>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon bg-red"><i class="fa-solid fa-ban"></i></div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="statBlocked">0</span>
+                        <span class="stat-label">Blocked Today</span>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon bg-teal"><i class="fa-solid fa-check-circle"></i></div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="statAllowed">0</span>
+                        <span class="stat-label">Allowed Today</span>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon bg-orange"><i class="fa-solid fa-plug"></i></div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="statConnections">0</span>
+                        <span class="stat-label">Active Connections</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Dashboard panels -->
+            <div class="dashboard-grid">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="fa-solid fa-clock-rotate-left"></i>
+                        <h3>Recent Traffic</h3>
+                    </div>
+                    <div class="card-body">
+                        <table class="table" id="dashRecentLogs">
+                            <thead>
+                                <tr><th>Time</th><th>Action</th><th>Source</th><th>Destination</th><th>Protocol</th><th>Detail</th></tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <i class="fa-solid fa-network-wired"></i>
+                        <h3>Active Connections</h3>
+                    </div>
+                    <div class="card-body">
+                        <table class="table" id="dashConnections">
+                            <thead>
+                                <tr><th>Protocol</th><th>Local</th><th>Remote</th><th>State</th></tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ===== RULES PAGE ===== -->
+        <section class="page" id="page-rules">
+            <div class="page-toolbar">
+                <h2>Firewall Rules</h2>
+                <button class="btn btn-primary" id="btnAddRule">
+                    <i class="fa-solid fa-plus"></i> Add Rule
+                </button>
+            </div>
+            <div class="card">
+                <div class="card-body table-responsive">
+                    <table class="table" id="rulesTable">
+                        <thead>
+                            <tr>
+                                <th>Status</th>
+                                <th>Chain</th>
+                                <th>Protocol</th>
+                                <th>Source</th>
+                                <th>Destination</th>
+                                <th>Dst Port</th>
+                                <th>Action</th>
+                                <th>Comment</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ===== CONNECTIONS PAGE ===== -->
+        <section class="page" id="page-connections">
+            <div class="page-toolbar">
+                <h2>Active Connections</h2>
+                <button class="btn btn-secondary" id="btnRefreshConn">
+                    <i class="fa-solid fa-arrows-rotate"></i> Refresh
+                </button>
+            </div>
+            <div class="card">
+                <div class="card-body table-responsive">
+                    <table class="table" id="connectionsTable">
+                        <thead>
+                            <tr><th>Protocol</th><th>Local IP</th><th>Local Port</th><th>Remote IP</th><th>Remote Port</th><th>State</th></tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ===== LOGS PAGE ===== -->
+        <section class="page" id="page-logs">
+            <div class="page-toolbar">
+                <h2>Traffic Logs</h2>
+                <button class="btn btn-secondary" id="btnRefreshLogs">
+                    <i class="fa-solid fa-arrows-rotate"></i> Refresh
+                </button>
+            </div>
+            <div class="card">
+                <div class="card-body table-responsive">
+                    <table class="table" id="logsTable">
+                        <thead>
+                            <tr><th>Timestamp</th><th>Action</th><th>Source IP</th><th>Dest IP</th><th>Protocol</th><th>Detail</th></tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+    </div>
+</main>
+
+<!-- Add Rule Modal -->
+<div class="modal-overlay" id="ruleModal">
+    <div class="modal">
+        <div class="modal-header">
+            <h3><i class="fa-solid fa-plus-circle"></i> Add Firewall Rule</h3>
+            <button class="modal-close" id="modalClose"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <form id="ruleForm">
+            <div class="modal-body">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="ruleChain">Chain</label>
+                        <select id="ruleChain" required>
+                            <option value="INPUT">INPUT</option>
+                            <option value="OUTPUT">OUTPUT</option>
+                            <option value="FORWARD">FORWARD</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="ruleProtocol">Protocol</label>
+                        <select id="ruleProtocol" required>
+                            <option value="tcp">TCP</option>
+                            <option value="udp">UDP</option>
+                            <option value="icmp">ICMP</option>
+                            <option value="all">ALL</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="ruleSrcIP">Source IP</label>
+                        <input type="text" id="ruleSrcIP" placeholder="any" value="any">
+                    </div>
+                    <div class="form-group">
+                        <label for="ruleDstIP">Destination IP</label>
+                        <input type="text" id="ruleDstIP" placeholder="any" value="any">
+                    </div>
+                    <div class="form-group">
+                        <label for="ruleSrcPort">Source Port</label>
+                        <input type="text" id="ruleSrcPort" placeholder="any" value="any">
+                    </div>
+                    <div class="form-group">
+                        <label for="ruleDstPort">Destination Port</label>
+                        <input type="text" id="ruleDstPort" placeholder="e.g. 80">
+                    </div>
+                    <div class="form-group">
+                        <label for="ruleAction">Action</label>
+                        <select id="ruleAction" required>
+                            <option value="ACCEPT">ACCEPT</option>
+                            <option value="DROP">DROP</option>
+                            <option value="REJECT">REJECT</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="ruleEnabled">Enabled</label>
+                        <select id="ruleEnabled">
+                            <option value="true">Yes</option>
+                            <option value="false">No</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group full-width">
+                    <label for="ruleComment">Comment</label>
+                    <input type="text" id="ruleComment" placeholder="Rule description">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" id="btnCancelRule">Cancel</button>
+                <button type="submit" class="btn btn-primary"><i class="fa-solid fa-check"></i> Create Rule</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Toast Notification -->
+<div class="toast" id="toast"></div>
+
+<script src="js/app.js"></script>
+</body>
+</html>
