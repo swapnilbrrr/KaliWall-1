@@ -229,7 +229,7 @@ KaliWall/
 ```
 
 ## 📸 Screenshots
-
+Screenshot 2026-03-12 230832.png
 > The web UI features a FortiGate-inspired dark sidebar with a clean card-based layout including live bandwidth charts, CPU/memory gauges, threat intelligence dashboard, and full rule management.
 
 ## 🛡️ Security Notes
