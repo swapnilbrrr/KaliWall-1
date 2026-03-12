@@ -49,6 +49,8 @@
                 loadSysInfo();
                 loadDashboardLogs();
                 loadDashboardConnections();
+                loadAnalytics();
+                startBandwidthStream();
                 break;
             case "rules":
                 loadRules();
@@ -63,6 +65,7 @@
                 loadSettings();
                 break;
         }
+        if (page !== "dashboard") stopBandwidthStream();
     }
 
     async function apiFetch(endpoint) {
@@ -520,6 +523,248 @@
         if (verdict.country) title += (title ? " | " : "") + verdict.country;
         if (verdict.malicious > 0) title += (title ? " | " : "") + verdict.malicious + " malicious detections";
         return '<span class="badge ' + cls + '" title="' + escapeHtml(title) + '"><i class="fa-solid ' + icon + '"></i> ' + escapeHtml(label) + '</span>';
+    }
+
+    // ---------- Live Charts (Chart.js) ----------
+
+    var bandwidthChart = null;
+    var protocolChart = null;
+    var blockedAllowedChart = null;
+    var topTalkersChart = null;
+    var bandwidthEventSource = null;
+    var analyticsRefreshInterval = null;
+
+    var chartColors = {
+        blue:    "rgba(26, 115, 232, 1)",
+        blueFill:"rgba(26, 115, 232, 0.12)",
+        teal:    "rgba(0, 137, 123, 1)",
+        tealFill:"rgba(0, 137, 123, 0.12)",
+        red:     "rgba(217, 48, 37, 1)",
+        green:   "rgba(30, 142, 62, 1)",
+        orange:  "rgba(232, 113, 10, 1)",
+        purple:  "rgba(132, 48, 206, 1)",
+        yellow:  "rgba(249, 171, 0, 1)",
+        gray:    "rgba(156, 163, 175, 1)",
+    };
+
+    var pieColors = [
+        chartColors.blue, chartColors.teal, chartColors.orange,
+        chartColors.purple, chartColors.yellow, chartColors.gray,
+        chartColors.red, chartColors.green,
+    ];
+
+    function initBandwidthChart() {
+        if (bandwidthChart) return;
+        var ctx = document.getElementById("chartBandwidth");
+        if (!ctx) return;
+        bandwidthChart = new Chart(ctx, {
+            type: "line",
+            data: {
+                labels: [],
+                datasets: [
+                    {
+                        label: "RX (bytes/s)",
+                        data: [],
+                        borderColor: chartColors.blue,
+                        backgroundColor: chartColors.blueFill,
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 0,
+                        borderWidth: 2,
+                    },
+                    {
+                        label: "TX (bytes/s)",
+                        data: [],
+                        borderColor: chartColors.teal,
+                        backgroundColor: chartColors.tealFill,
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 0,
+                        borderWidth: 2,
+                    },
+                ],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: "index", intersect: false },
+                plugins: {
+                    legend: { position: "top", labels: { usePointStyle: true, padding: 16, font: { family: "Inter", size: 12 } } },
+                    tooltip: {
+                        callbacks: {
+                            label: function (ctx) { return ctx.dataset.label + ": " + formatBytes(ctx.parsed.y) + "/s"; },
+                        },
+                    },
+                },
+                scales: {
+                    x: { display: true, grid: { display: false }, ticks: { maxTicksLimit: 10, font: { size: 10 } } },
+                    y: {
+                        display: true,
+                        beginAtZero: true,
+                        grid: { color: "rgba(0,0,0,0.05)" },
+                        ticks: {
+                            font: { size: 10 },
+                            callback: function (v) { return formatBytes(v) + "/s"; },
+                        },
+                    },
+                },
+                animation: { duration: 300 },
+            },
+        });
+    }
+
+    function initProtocolChart() {
+        if (protocolChart) return;
+        var ctx = document.getElementById("chartProtocol");
+        if (!ctx) return;
+        protocolChart = new Chart(ctx, {
+            type: "doughnut",
+            data: { labels: [], datasets: [{ data: [], backgroundColor: pieColors, borderWidth: 2, borderColor: "#fff" }] },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: "bottom", labels: { usePointStyle: true, padding: 12, font: { family: "Inter", size: 11 } } },
+                },
+                cutout: "60%",
+                animation: { duration: 400 },
+            },
+        });
+    }
+
+    function initBlockedAllowedChart() {
+        if (blockedAllowedChart) return;
+        var ctx = document.getElementById("chartBlockedAllowed");
+        if (!ctx) return;
+        blockedAllowedChart = new Chart(ctx, {
+            type: "doughnut",
+            data: {
+                labels: ["Blocked", "Allowed"],
+                datasets: [{ data: [0, 0], backgroundColor: [chartColors.red, chartColors.green], borderWidth: 2, borderColor: "#fff" }],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: "bottom", labels: { usePointStyle: true, padding: 12, font: { family: "Inter", size: 11 } } },
+                },
+                cutout: "60%",
+                animation: { duration: 400 },
+            },
+        });
+    }
+
+    function initTopTalkersChart() {
+        if (topTalkersChart) return;
+        var ctx = document.getElementById("chartTopTalkers");
+        if (!ctx) return;
+        topTalkersChart = new Chart(ctx, {
+            type: "bar",
+            data: {
+                labels: [],
+                datasets: [{
+                    label: "Events",
+                    data: [],
+                    backgroundColor: chartColors.blue,
+                    borderRadius: 4,
+                    maxBarThickness: 28,
+                }],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                indexAxis: "y",
+                plugins: {
+                    legend: { display: false },
+                },
+                scales: {
+                    x: { beginAtZero: true, grid: { color: "rgba(0,0,0,0.05)" }, ticks: { font: { size: 10 } } },
+                    y: { grid: { display: false }, ticks: { font: { family: "Inter", size: 10 } } },
+                },
+                animation: { duration: 400 },
+            },
+        });
+    }
+
+    async function loadAnalytics() {
+        initBandwidthChart();
+        initProtocolChart();
+        initBlockedAllowedChart();
+        initTopTalkersChart();
+
+        var res = await apiFetch("/analytics");
+        if (!res.success) return;
+        var snap = res.data;
+
+        // Fill bandwidth history
+        if (bandwidthChart && snap.bandwidth) {
+            bandwidthChart.data.labels = snap.bandwidth.map(function (s) {
+                var d = new Date(s.time);
+                return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+            });
+            bandwidthChart.data.datasets[0].data = snap.bandwidth.map(function (s) { return s.rx_bps; });
+            bandwidthChart.data.datasets[1].data = snap.bandwidth.map(function (s) { return s.tx_bps; });
+            bandwidthChart.update("none");
+        }
+
+        // Protocol breakdown
+        if (protocolChart && snap.protocols) {
+            protocolChart.data.labels = snap.protocols.map(function (p) { return p.protocol; });
+            protocolChart.data.datasets[0].data = snap.protocols.map(function (p) { return p.count; });
+            protocolChart.update();
+        }
+
+        // Blocked vs Allowed
+        if (blockedAllowedChart) {
+            blockedAllowedChart.data.datasets[0].data = [snap.blocked_count || 0, snap.allowed_count || 0];
+            blockedAllowedChart.update();
+        }
+
+        // Top Talkers
+        if (topTalkersChart && snap.top_talkers) {
+            topTalkersChart.data.labels = snap.top_talkers.map(function (t) { return t.ip; });
+            topTalkersChart.data.datasets[0].data = snap.top_talkers.map(function (t) { return t.count; });
+            topTalkersChart.update();
+        }
+
+        // Set up periodic refresh for non-bandwidth charts (every 10s)
+        if (!analyticsRefreshInterval) {
+            analyticsRefreshInterval = setInterval(function () {
+                if (!document.getElementById("page-dashboard").classList.contains("active")) return;
+                loadAnalytics();
+            }, 10000);
+        }
+    }
+
+    function startBandwidthStream() {
+        stopBandwidthStream();
+        initBandwidthChart();
+        bandwidthEventSource = new EventSource(API + "/analytics/stream");
+        bandwidthEventSource.addEventListener("bandwidth", function (e) {
+            if (!bandwidthChart) return;
+            try {
+                var sample = JSON.parse(e.data);
+                var d = new Date(sample.time);
+                var label = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+                bandwidthChart.data.labels.push(label);
+                bandwidthChart.data.datasets[0].data.push(sample.rx_bps);
+                bandwidthChart.data.datasets[1].data.push(sample.tx_bps);
+                // Keep max 120 points
+                if (bandwidthChart.data.labels.length > 120) {
+                    bandwidthChart.data.labels.shift();
+                    bandwidthChart.data.datasets[0].data.shift();
+                    bandwidthChart.data.datasets[1].data.shift();
+                }
+                bandwidthChart.update("none");
+            } catch (_) {}
+        });
+    }
+
+    function stopBandwidthStream() {
+        if (bandwidthEventSource) {
+            bandwidthEventSource.close();
+            bandwidthEventSource = null;
+        }
     }
 
     // ---------- Helpers ----------

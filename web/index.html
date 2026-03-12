@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
 
@@ -166,6 +167,40 @@
                         <thead><tr><th>Interface</th><th>Addresses</th><th>RX</th><th>TX</th></tr></thead>
                         <tbody></tbody>
                     </table>
+                </div>
+            </div>
+
+            <!-- Live Bandwidth Chart (full width) -->
+            <div class="card chart-card" style="margin-bottom:20px">
+                <div class="card-header">
+                    <i class="fa-solid fa-chart-line"></i>
+                    <h3>Live Bandwidth</h3>
+                    <span class="live-indicator chart-live-dot"><i class="fa-solid fa-circle live-dot"></i> LIVE</span>
+                </div>
+                <div class="card-body chart-body">
+                    <canvas id="chartBandwidth"></canvas>
+                </div>
+            </div>
+
+            <!-- Charts Row: Protocol Breakdown, Blocked vs Allowed, Top Talkers -->
+            <div class="charts-grid">
+                <div class="card chart-card">
+                    <div class="card-header"><i class="fa-solid fa-chart-pie"></i><h3>Protocol Breakdown</h3></div>
+                    <div class="card-body chart-body chart-body-sm">
+                        <canvas id="chartProtocol"></canvas>
+                    </div>
+                </div>
+                <div class="card chart-card">
+                    <div class="card-header"><i class="fa-solid fa-chart-pie"></i><h3>Blocked vs Allowed</h3></div>
+                    <div class="card-body chart-body chart-body-sm">
+                        <canvas id="chartBlockedAllowed"></canvas>
+                    </div>
+                </div>
+                <div class="card chart-card">
+                    <div class="card-header"><i class="fa-solid fa-ranking-star"></i><h3>Top Talkers</h3></div>
+                    <div class="card-body chart-body chart-body-sm">
+                        <canvas id="chartTopTalkers"></canvas>
+                    </div>
                 </div>
             </div>
 

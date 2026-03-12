@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"kaliwall/internal/analytics"
 	"kaliwall/internal/api"
 	"kaliwall/internal/firewall"
 	"kaliwall/internal/logger"
@@ -50,8 +51,12 @@ func main() {
 	monitor := netmon.New(trafficLogger)
 	monitor.Start()
 
+	// Start analytics engine (bandwidth sampling)
+	analyticsService := analytics.New(trafficLogger)
+	analyticsService.Start()
+
 	// Initialize REST API and web server
-	handler := api.NewRouter(fw, trafficLogger, ti)
+	handler := api.NewRouter(fw, trafficLogger, ti, analyticsService)
 
 	// Graceful shutdown on SIGINT/SIGTERM
 	stop := make(chan os.Signal, 1)
@@ -70,5 +75,6 @@ func main() {
 	<-stop
 	fmt.Println("\n[*] Shutting down KaliWall daemon...")
 	monitor.Stop()
+	analyticsService.Stop()
 	trafficLogger.Log("SYSTEM", "-", "-", "-", "Daemon stopped")
 }

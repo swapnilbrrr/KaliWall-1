@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"kaliwall/internal/analytics"
 	"kaliwall/internal/firewall"
 	"kaliwall/internal/logger"
 	"kaliwall/internal/models"
@@ -16,10 +17,10 @@ import (
 )
 
 // NewRouter creates the HTTP mux with all API routes and static file serving.
-func NewRouter(fw *firewall.Engine, tl *logger.TrafficLogger, ti *threatintel.Service) http.Handler {
+func NewRouter(fw *firewall.Engine, tl *logger.TrafficLogger, ti *threatintel.Service, an *analytics.Service) http.Handler {
 	mux := http.NewServeMux()
 
-	h := &handlers{fw: fw, logger: tl, threat: ti}
+	h := &handlers{fw: fw, logger: tl, threat: ti, analytics: an}
 
 	// REST API v1 endpoints
 	mux.HandleFunc("/api/v1/rules", h.handleRules)
@@ -31,6 +32,8 @@ func NewRouter(fw *firewall.Engine, tl *logger.TrafficLogger, ti *threatintel.Se
 	mux.HandleFunc("/api/v1/logs/stream", h.handleLogStream)
 	mux.HandleFunc("/api/v1/threat/apikey", h.handleAPIKey)
 	mux.HandleFunc("/api/v1/threat/check/", h.handleThreatCheck)
+	mux.HandleFunc("/api/v1/analytics", h.handleAnalytics)
+	mux.HandleFunc("/api/v1/analytics/stream", h.handleAnalyticsStream)
 
 	// Serve web UI from the "web" directory
 	fs := http.FileServer(http.Dir("web"))
@@ -41,9 +44,10 @@ func NewRouter(fw *firewall.Engine, tl *logger.TrafficLogger, ti *threatintel.Se
 
 // handlers holds dependencies for HTTP handler methods.
 type handlers struct {
-	fw     *firewall.Engine
-	logger *logger.TrafficLogger
-	threat *threatintel.Service
+	fw        *firewall.Engine
+	logger    *logger.TrafficLogger
+	threat    *threatintel.Service
+	analytics *analytics.Service
 }
 
 // ---------- Rules ----------
@@ -271,6 +275,49 @@ func (h *handlers) handleThreatCheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respond(w, http.StatusOK, models.APIResponse{Success: true, Data: verdict})
+}
+
+// ---------- Analytics ----------
+
+// handleAnalytics returns the full analytics snapshot (bandwidth history, top talkers, protocols, blocked/allowed).
+func (h *handlers) handleAnalytics(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	snap := h.analytics.GetSnapshot()
+	respond(w, http.StatusOK, models.APIResponse{Success: true, Data: snap})
+}
+
+// handleAnalyticsStream provides SSE for live bandwidth samples.
+func (h *handlers) handleAnalyticsStream(w http.ResponseWriter, r *http.Request) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Streaming not supported", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+
+	subID, ch := h.analytics.Subscribe()
+	defer h.analytics.Unsubscribe(subID)
+
+	ctx := r.Context()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case sample, ok := <-ch:
+			if !ok {
+				return
+			}
+			data, _ := json.Marshal(sample)
+			fmt.Fprintf(w, "event: bandwidth\ndata: %s\n\n", data)
+			flusher.Flush()
+		}
+	}
 }
 
 // ---------- Helpers ----------
