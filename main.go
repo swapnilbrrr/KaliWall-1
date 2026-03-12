@@ -14,6 +14,7 @@ import (
 	"kaliwall/internal/firewall"
 	"kaliwall/internal/logger"
 	"kaliwall/internal/netmon"
+	"kaliwall/internal/threatintel"
 )
 
 const (
@@ -42,15 +43,15 @@ func main() {
 	// Initialize firewall engine (nftables/iptables)
 	fw := firewall.New(trafficLogger)
 
-	// Load sample rules for demo purposes
-	fw.LoadSampleRules()
+	// Initialize threat intelligence service (VirusTotal)
+	ti := threatintel.New()
 
 	// Start real-time network monitor
 	monitor := netmon.New(trafficLogger)
 	monitor.Start()
 
 	// Initialize REST API and web server
-	handler := api.NewRouter(fw, trafficLogger)
+	handler := api.NewRouter(fw, trafficLogger, ti)
 
 	// Graceful shutdown on SIGINT/SIGTERM
 	stop := make(chan os.Signal, 1)

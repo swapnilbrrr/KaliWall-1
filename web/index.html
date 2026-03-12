@@ -30,6 +30,9 @@
         <a href="#" class="nav-item" data-page="logs">
             <i class="fa-solid fa-file-lines"></i><span>Traffic Logs</span>
         </a>
+        <a href="#" class="nav-item" data-page="settings">
+            <i class="fa-solid fa-gear"></i><span>Settings</span>
+        </a>
     </nav>
     <div class="sidebar-footer">
         <div class="system-status">
@@ -241,7 +244,7 @@
                 <div class="card-body table-responsive">
                     <table class="table" id="connectionsTable">
                         <thead>
-                            <tr><th>Protocol</th><th>Local IP</th><th>Local Port</th><th>Remote IP</th><th>Remote Port</th><th>State</th></tr>
+                            <tr><th>Protocol</th><th>Local IP</th><th>Local Port</th><th>Remote IP</th><th>Remote Port</th><th>State</th><th>Threat</th></tr>
                         </thead>
                         <tbody></tbody>
                     </table>
@@ -276,6 +279,38 @@
                         </thead>
                         <tbody></tbody>
                     </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ===== SETTINGS PAGE ===== -->
+        <section class="page" id="page-settings">
+            <div class="page-toolbar">
+                <h2>Settings</h2>
+            </div>
+
+            <!-- Threat Intelligence API Key -->
+            <div class="card settings-card">
+                <div class="card-header">
+                    <i class="fa-solid fa-shield-virus"></i>
+                    <h3>Threat Intelligence (VirusTotal)</h3>
+                </div>
+                <div class="card-body" style="padding:20px">
+                    <p class="settings-desc">Enter your VirusTotal API key to enable automatic IP reputation lookups on connections and traffic. Get a free key at <a href="https://www.virustotal.com" target="_blank" rel="noopener noreferrer">virustotal.com</a>.</p>
+                    <div class="api-key-form">
+                        <div class="form-group">
+                            <label for="vtApiKey">API Key</label>
+                            <div class="input-with-btn">
+                                <input type="password" id="vtApiKey" placeholder="Paste your VirusTotal API key" autocomplete="off">
+                                <button class="btn btn-primary" id="btnSaveApiKey"><i class="fa-solid fa-save"></i> Save</button>
+                            </div>
+                        </div>
+                        <div class="api-key-status" id="apiKeyStatus">
+                            <span class="badge badge-disabled" id="apiKeyBadge">Not configured</span>
+                            <button class="btn btn-sm btn-danger" id="btnRemoveApiKey" style="display:none"><i class="fa-solid fa-trash"></i> Remove Key</button>
+                            <button class="btn btn-sm btn-secondary" id="btnClearCache"><i class="fa-solid fa-broom"></i> Clear Cache</button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </section>

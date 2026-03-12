@@ -12,13 +12,14 @@ import (
 	"kaliwall/internal/logger"
 	"kaliwall/internal/models"
 	"kaliwall/internal/sysinfo"
+	"kaliwall/internal/threatintel"
 )
 
 // NewRouter creates the HTTP mux with all API routes and static file serving.
-func NewRouter(fw *firewall.Engine, tl *logger.TrafficLogger) http.Handler {
+func NewRouter(fw *firewall.Engine, tl *logger.TrafficLogger, ti *threatintel.Service) http.Handler {
 	mux := http.NewServeMux()
 
-	h := &handlers{fw: fw, logger: tl}
+	h := &handlers{fw: fw, logger: tl, threat: ti}
 
 	// REST API v1 endpoints
 	mux.HandleFunc("/api/v1/rules", h.handleRules)
@@ -28,6 +29,8 @@ func NewRouter(fw *firewall.Engine, tl *logger.TrafficLogger) http.Handler {
 	mux.HandleFunc("/api/v1/connections", h.handleConnections)
 	mux.HandleFunc("/api/v1/logs", h.handleLogs)
 	mux.HandleFunc("/api/v1/logs/stream", h.handleLogStream)
+	mux.HandleFunc("/api/v1/threat/apikey", h.handleAPIKey)
+	mux.HandleFunc("/api/v1/threat/check/", h.handleThreatCheck)
 
 	// Serve web UI from the "web" directory
 	fs := http.FileServer(http.Dir("web"))
@@ -40,6 +43,7 @@ func NewRouter(fw *firewall.Engine, tl *logger.TrafficLogger) http.Handler {
 type handlers struct {
 	fw     *firewall.Engine
 	logger *logger.TrafficLogger
+	threat *threatintel.Service
 }
 
 // ---------- Rules ----------
@@ -211,6 +215,62 @@ func (h *handlers) handleLogStream(w http.ResponseWriter, r *http.Request) {
 			flusher.Flush()
 		}
 	}
+}
+
+// ---------- Threat Intelligence ----------
+
+// handleAPIKey handles GET (check status) and POST (set key) for the VT API key.
+func (h *handlers) handleAPIKey(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		respond(w, http.StatusOK, models.APIResponse{
+			Success: true,
+			Data: map[string]interface{}{
+				"configured":   h.threat.HasAPIKey(),
+				"cache_entries": h.threat.CacheStats(),
+			},
+		})
+	case http.MethodPost:
+		var body struct {
+			APIKey string `json:"api_key"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.APIKey == "" {
+			respond(w, http.StatusBadRequest, models.APIResponse{Success: false, Message: "api_key is required"})
+			return
+		}
+		h.threat.SetAPIKey(body.APIKey)
+		respond(w, http.StatusOK, models.APIResponse{Success: true, Message: "API key saved"})
+	case http.MethodDelete:
+		h.threat.SetAPIKey("")
+		h.threat.ClearCache()
+		respond(w, http.StatusOK, models.APIResponse{Success: true, Message: "API key removed"})
+	default:
+		methodNotAllowed(w)
+	}
+}
+
+// handleThreatCheck looks up an IP against VirusTotal: /api/v1/threat/check/{ip}
+func (h *handlers) handleThreatCheck(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	ip := strings.TrimPrefix(r.URL.Path, "/api/v1/threat/check/")
+	if ip == "" {
+		respond(w, http.StatusBadRequest, models.APIResponse{Success: false, Message: "IP address required"})
+		return
+	}
+
+	verdict, err := h.threat.CheckIP(ip)
+	if err != nil {
+		respond(w, http.StatusOK, models.APIResponse{
+			Success: true,
+			Message: err.Error(),
+			Data:    verdict,
+		})
+		return
+	}
+	respond(w, http.StatusOK, models.APIResponse{Success: true, Data: verdict})
 }
 
 // ---------- Helpers ----------

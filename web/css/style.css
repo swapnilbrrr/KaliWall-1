@@ -487,6 +487,14 @@ body {
 .badge-time_wait   { background: #f3f4f6; color: #9ca3af; }
 .badge-close_wait  { background: #fef7e0; color: #e37400; }
 
+/* Threat level badges */
+.badge-threat-safe       { background: #e6f4ea; color: #1e8e3e; }
+.badge-threat-suspicious { background: #fef7e0; color: #e37400; }
+.badge-threat-malicious  { background: #fce8e6; color: #d93025; font-weight: 700; }
+.badge-threat-internal   { background: #e8f0fe; color: #1a73e8; }
+.badge-threat-unknown    { background: #f3f4f6; color: #9ca3af; }
+.badge-threat-rate_limited { background: #f3f4f6; color: #9ca3af; }
+
 /* ---------- Buttons ---------- */
 .btn {
     display: inline-flex;
@@ -801,4 +809,60 @@ body {
 
 .table tbody tr.log-new {
     animation: logFlash 1.2s ease-out;
+}
+
+/* ---------- Settings Page ---------- */
+.settings-card {
+    max-width: 700px;
+}
+
+.settings-desc {
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+    line-height: 1.5;
+}
+
+.settings-desc a {
+    color: var(--color-primary);
+    text-decoration: none;
+}
+
+.settings-desc a:hover {
+    text-decoration: underline;
+}
+
+.input-with-btn {
+    display: flex;
+    gap: 8px;
+}
+
+.input-with-btn input {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 0.88rem;
+    font-family: inherit;
+}
+
+.input-with-btn input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.15);
+}
+
+.api-key-status {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 14px;
+}
+
+.api-key-form .form-group {
+    margin-bottom: 0;
+}
+
+.threat-cell .badge {
+    cursor: default;
 }

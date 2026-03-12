@@ -42,12 +42,12 @@ func New(l *logger.TrafficLogger) *Engine {
 // detectMode checks if iptables is available and we have root privileges.
 func (e *Engine) detectMode() {
 	if os.Getuid() != 0 {
-		fmt.Println("[!] Not running as root — demo mode (rules stored in-memory only)")
+		fmt.Println("[!] Not running as root — rules stored in-memory only")
 		e.liveMode = false
 		return
 	}
 	if _, err := exec.LookPath("iptables"); err != nil {
-		fmt.Println("[!] iptables not found — demo mode")
+		fmt.Println("[!] iptables not found — rules stored in-memory only")
 		e.liveMode = false
 		return
 	}
@@ -313,29 +313,6 @@ func buildIPTablesArgs(op string, r models.Rule) []string {
 	}
 
 	return args
-}
-
-// ---------- Sample / Demo Rules ----------
-
-// LoadSampleRules populates a set of demonstration firewall rules.
-func (e *Engine) LoadSampleRules() {
-	samples := []models.RuleRequest{
-		{Chain: "INPUT", Protocol: "tcp", SrcIP: "any", DstIP: "any", SrcPort: "any", DstPort: "22", Action: "ACCEPT", Comment: "Allow SSH", Enabled: true},
-		{Chain: "INPUT", Protocol: "tcp", SrcIP: "any", DstIP: "any", SrcPort: "any", DstPort: "80", Action: "ACCEPT", Comment: "Allow HTTP", Enabled: true},
-		{Chain: "INPUT", Protocol: "tcp", SrcIP: "any", DstIP: "any", SrcPort: "any", DstPort: "443", Action: "ACCEPT", Comment: "Allow HTTPS", Enabled: true},
-		{Chain: "INPUT", Protocol: "icmp", SrcIP: "any", DstIP: "any", SrcPort: "any", DstPort: "any", Action: "ACCEPT", Comment: "Allow Ping", Enabled: true},
-		{Chain: "INPUT", Protocol: "tcp", SrcIP: "10.0.0.0/8", DstIP: "any", SrcPort: "any", DstPort: "3306", Action: "ACCEPT", Comment: "MySQL from internal", Enabled: true},
-		{Chain: "INPUT", Protocol: "tcp", SrcIP: "any", DstIP: "any", SrcPort: "any", DstPort: "23", Action: "DROP", Comment: "Block Telnet", Enabled: true},
-		{Chain: "INPUT", Protocol: "tcp", SrcIP: "any", DstIP: "any", SrcPort: "any", DstPort: "3389", Action: "DROP", Comment: "Block RDP", Enabled: false},
-		{Chain: "FORWARD", Protocol: "all", SrcIP: "192.168.1.0/24", DstIP: "any", SrcPort: "any", DstPort: "any", Action: "ACCEPT", Comment: "Forward LAN traffic", Enabled: true},
-		{Chain: "OUTPUT", Protocol: "tcp", SrcIP: "any", DstIP: "any", SrcPort: "any", DstPort: "53", Action: "ACCEPT", Comment: "Allow DNS out", Enabled: true},
-		{Chain: "OUTPUT", Protocol: "udp", SrcIP: "any", DstIP: "any", SrcPort: "any", DstPort: "53", Action: "ACCEPT", Comment: "Allow DNS out (UDP)", Enabled: true},
-	}
-
-	for _, s := range samples {
-		e.AddRule(s)
-	}
-	fmt.Printf("[+] Loaded %d sample firewall rules\n", len(samples))
 }
 
 // ---------- Validation ----------

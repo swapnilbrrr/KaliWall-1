@@ -19,6 +19,7 @@
         rules: "Firewall Rules",
         connections: "Active Connections",
         logs: "Traffic Logs",
+        settings: "Settings",
     };
 
     navItems.forEach((item) => {
@@ -57,6 +58,9 @@
                 break;
             case "logs":
                 loadLogs();
+                break;
+            case "settings":
+                loadSettings();
                 break;
         }
     }
@@ -218,15 +222,19 @@
         tbody.innerHTML = "";
         res.data.forEach((c) => {
             const tr = document.createElement("tr");
+            var remoteIP = c.remote_ip || "";
             tr.innerHTML =
                 "<td>" + escapeHtml(c.protocol) + "</td>" +
                 "<td>" + escapeHtml(c.local_ip) + "</td>" +
                 "<td>" + escapeHtml(c.local_port) + "</td>" +
-                "<td>" + escapeHtml(c.remote_ip) + "</td>" +
+                "<td>" + escapeHtml(remoteIP) + "</td>" +
                 "<td>" + escapeHtml(c.remote_port) + "</td>" +
-                "<td>" + stateBadge(c.state) + "</td>";
+                "<td>" + stateBadge(c.state) + "</td>" +
+                '<td class="threat-cell" data-ip="' + escapeHtml(remoteIP) + '"><span class="badge badge-disabled">-</span></td>';
             tbody.appendChild(tr);
         });
+        // Auto-check threat for non-private remote IPs
+        checkThreatForConnections();
     }
 
     // ---------- Logs (Real-time SSE) ----------
@@ -411,6 +419,108 @@
         var tbody = document.querySelector("#logsTable tbody");
         if (tbody) tbody.innerHTML = "";
     });
+
+    // ---------- Settings & Threat Intelligence ----------
+
+    async function loadSettings() {
+        var res = await apiFetch("/threat/apikey");
+        if (!res.success) return;
+        var badge = document.getElementById("apiKeyBadge");
+        var removeBtn = document.getElementById("btnRemoveApiKey");
+        if (res.data.configured) {
+            badge.className = "badge badge-enabled";
+            badge.innerHTML = '<i class="fa-solid fa-check"></i> API key configured (' + res.data.cache_entries + ' cached IPs)';
+            removeBtn.style.display = "";
+        } else {
+            badge.className = "badge badge-disabled";
+            badge.textContent = "Not configured";
+            removeBtn.style.display = "none";
+        }
+    }
+
+    document.getElementById("btnSaveApiKey").addEventListener("click", async function () {
+        var key = document.getElementById("vtApiKey").value.trim();
+        if (!key) { toast("Enter an API key", "error"); return; }
+        var res = await fetch(API + "/threat/apikey", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ api_key: key }),
+        });
+        var data = await res.json();
+        if (data.success) {
+            toast("API key saved", "success");
+            document.getElementById("vtApiKey").value = "";
+            loadSettings();
+        } else {
+            toast(data.message || "Failed to save key", "error");
+        }
+    });
+
+    document.getElementById("btnRemoveApiKey").addEventListener("click", async function () {
+        if (!confirm("Remove the VirusTotal API key?")) return;
+        await fetch(API + "/threat/apikey", { method: "DELETE" });
+        toast("API key removed", "success");
+        loadSettings();
+    });
+
+    document.getElementById("btnClearCache").addEventListener("click", async function () {
+        threatCache = {};
+        toast("Local threat cache cleared", "success");
+    });
+
+    // Automatically check threat for each unique remote IP in the connections table
+    var threatCache = {};
+
+    async function checkThreatForConnections() {
+        var cells = document.querySelectorAll("#connectionsTable .threat-cell");
+        var checked = {};
+        for (var i = 0; i < cells.length; i++) {
+            var ip = cells[i].getAttribute("data-ip");
+            if (!ip || ip === "0.0.0.0" || ip === "127.0.0.1" || ip === "::1" || ip === "*" || ip === "") continue;
+            if (checked[ip]) {
+                // Apply cached result
+                if (threatCache[ip]) cells[i].innerHTML = threatBadge(threatCache[ip]);
+                continue;
+            }
+            checked[ip] = true;
+            if (threatCache[ip]) {
+                cells[i].innerHTML = threatBadge(threatCache[ip]);
+                continue;
+            }
+            // Async lookup — fire and forget to avoid blocking
+            (function(cell, ipAddr) {
+                fetch(API + "/threat/check/" + encodeURIComponent(ipAddr))
+                    .then(function(r) { return r.json(); })
+                    .then(function(res) {
+                        if (res.data) {
+                            threatCache[ipAddr] = res.data;
+                            // Update all cells with this IP
+                            document.querySelectorAll('#connectionsTable .threat-cell[data-ip="' + ipAddr + '"]').forEach(function(c) {
+                                c.innerHTML = threatBadge(res.data);
+                            });
+                        }
+                    })
+                    .catch(function() {});
+            })(cells[i], ip);
+        }
+    }
+
+    function threatBadge(verdict) {
+        if (!verdict || !verdict.threat_level) return '<span class="badge badge-disabled">-</span>';
+        var level = verdict.threat_level;
+        var cls = "badge-threat-" + level;
+        var icon = level === "malicious" ? "fa-skull-crossbones"
+                 : level === "suspicious" ? "fa-triangle-exclamation"
+                 : level === "safe" ? "fa-shield-check"
+                 : level === "internal" ? "fa-house-signal"
+                 : "fa-question";
+        var label = level.charAt(0).toUpperCase() + level.slice(1);
+        var title = "";
+        if (verdict.owner) title += verdict.owner;
+        if (verdict.country) title += (title ? " | " : "") + verdict.country;
+        if (verdict.malicious > 0) title += (title ? " | " : "") + verdict.malicious + " malicious detections";
+        return '<span class="badge ' + cls + '" title="' + escapeHtml(title) + '"><i class="fa-solid ' + icon + '"></i> ' + escapeHtml(label) + '</span>';
+    }
 
     // ---------- Helpers ----------
 
