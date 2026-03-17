@@ -72,6 +72,23 @@ chmod +x start.sh && ./start.sh
 sudo ./start.sh --daemon
 ```
 
+### Deep Packet Inspection (DPI)
+
+```bash
+# Run with DPI enabled (requires root for pcap capture)
+sudo ./kaliwall \
+  --dpi \
+  --dpi-interface eth0 \
+  --dpi-rules configs/dpi-rules.yaml \
+  --dpi-workers 8 \
+  --dpi-promisc=true
+```
+
+Optional flags:
+
+- `--dpi-bpf "tcp or udp port 53"` to reduce capture volume.
+- `--dpi-rate 5000` to set per-source packet rate limiting.
+
 ### Logs and Status
 
 ```bash
@@ -107,6 +124,9 @@ go mod tidy
 go build -o kaliwall main.go
 go build -o kaliwall-cli ./cmd/kaliwall-cli
 
+# Run DPI unit tests
+go test ./internal/dpi/...
+
 # Run (foreground)
 sudo ./kaliwall
 
@@ -115,6 +135,25 @@ sudo ./kaliwall --daemon
 ```
 
 Open **http://localhost:8080** in your browser.
+
+## 🔬 DPI Architecture
+
+KaliWall DPI uses a modular pipeline:
+
+`Packet Capture -> Decode Layers -> Flow Tracking -> TCP Reassembly -> DPI Inspection -> Rule Engine -> Action`
+
+Packages:
+
+- `internal/dpi/capture` - live pcap capture, promiscuous mode, BPF filter support
+- `internal/dpi/decode` - Ethernet/IPv4/TCP/UDP/DNS extraction with malformed packet safety
+- `internal/dpi/flow` - 5-tuple tracking, expiration, optional per-source rate limit
+- `internal/dpi/reassembly` - bounded TCP stream reassembly (out-of-order + retransmission safe)
+- `internal/dpi/inspect` - HTTP method/host/url, DNS query, TLS SNI parsing, payload indicators
+- `internal/dpi/rules` - YAML/JSON rule loading with `ALLOW/BLOCK/LOG` and optional regex rules
+- `internal/dpi/action` - structured JSON decision logs and block/log side-effects
+- `internal/dpi/pipeline` - worker pool orchestration and stage integration
+
+Rule file example: `configs/dpi-rules.yaml`
 
 ## 📂 Project Structure
 

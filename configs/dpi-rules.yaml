@@ -1,0 +1,29 @@
+- id: payload-malware
+  type: payload
+  pattern: malware
+  action: BLOCK
+
+- id: payload-sqli
+  type: payload
+  pattern: union select
+  action: BLOCK
+
+- id: payload-xss
+  type: payload
+  pattern: <script>
+  action: LOG
+
+- id: dns-bad-domain
+  type: domain
+  pattern: bad.com
+  action: BLOCK
+
+- id: tls-malicious-sni
+  type: sni
+  pattern: evil.example
+  action: BLOCK
+
+- id: http-admin-observe
+  type: http_url
+  pattern: /admin
+  action: LOG

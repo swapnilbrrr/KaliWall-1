@@ -9,8 +9,10 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/user"
 	"os/exec"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -89,7 +91,7 @@ func New(l *logger.TrafficLogger, db *database.Store) *Engine {
 
 // detectMode checks available firewall backends and whether live mode is possible.
 func (e *Engine) detectMode() {
-	e.root = os.Getuid() == 0
+	e.root = isRootUser()
 	e.available = detectAvailableBackends()
 
 	if !e.root {
@@ -109,6 +111,17 @@ func (e *Engine) detectMode() {
 	e.backend = e.available[0]
 	e.liveMode = true
 	fmt.Printf("[+] Firewall backend: %s (available: %s)\n", e.backend, strings.Join(e.available, ", "))
+}
+
+func isRootUser() bool {
+	if runtime.GOOS == "windows" {
+		return false
+	}
+	u, err := user.Current()
+	if err != nil {
+		return false
+	}
+	return u.Uid == "0"
 }
 
 func detectAvailableBackends() []string {

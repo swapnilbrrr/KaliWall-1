@@ -1,0 +1,211 @@
+package pipeline
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"runtime"
+	"sync"
+	"time"
+
+	"github.com/google/gopacket"
+
+	"kaliwall/internal/dpi/action"
+	"kaliwall/internal/dpi/capture"
+	"kaliwall/internal/dpi/decode"
+	"kaliwall/internal/dpi/flow"
+	"kaliwall/internal/dpi/inspect"
+	"kaliwall/internal/dpi/reassembly"
+	"kaliwall/internal/dpi/rules"
+	"kaliwall/internal/dpi/types"
+	"kaliwall/internal/logger"
+)
+
+// Config controls end-to-end DPI pipeline behavior.
+type Config struct {
+	Interface       string
+	Promiscuous     bool
+	BPF             string
+	RulesPath       string
+	Workers         int
+	FlowTimeout     time.Duration
+	CleanupInterval time.Duration
+	MaxFlowBytes    int
+	MaxWindowBytes  int
+	RateLimitPerSec int
+}
+
+// Pipeline wires the full DPI processing path.
+type Pipeline struct {
+	cfg        Config
+	capturer   capture.Capturer
+	decoder    decode.Decoder
+	tracker    *flow.Tracker
+	reassembler reassembly.Reassembler
+	inspector  *inspect.Engine
+	ruleEngine *rules.Engine
+	actions    *action.Engine
+
+	inputCh chan gopacket.Packet
+	wg      sync.WaitGroup
+	stop    context.CancelFunc
+}
+
+func New(cfg Config, l *logger.TrafficLogger) (*Pipeline, error) {
+	if cfg.Interface == "" {
+		return nil, fmt.Errorf("dpi interface is required")
+	}
+	if cfg.Workers <= 0 {
+		cfg.Workers = max(2, runtime.NumCPU())
+	}
+
+	ruleEngine, err := rules.LoadFromFile(cfg.RulesPath)
+	if err != nil {
+		return nil, err
+	}
+
+	c := capture.New(capture.Config{
+		Interface:   cfg.Interface,
+		Promiscuous: cfg.Promiscuous,
+		BPF:         cfg.BPF,
+	})
+
+	t := flow.New(cfg.FlowTimeout, cfg.CleanupInterval, cfg.RateLimitPerSec)
+	r := reassembly.New(reassembly.Config{
+		MaxBytesPerFlow: cfg.MaxFlowBytes,
+		MaxWindowBytes:  cfg.MaxWindowBytes,
+		FlowTimeout:     cfg.FlowTimeout,
+		CleanupInterval: cfg.CleanupInterval,
+	})
+
+	return &Pipeline{
+		cfg:         cfg,
+		capturer:    c,
+		decoder:     decode.New(),
+		tracker:     t,
+		reassembler: r,
+		inspector:   inspect.New(),
+		ruleEngine:  ruleEngine,
+		actions:     action.New(l),
+		inputCh:     make(chan gopacket.Packet, 8192),
+	}, nil
+}
+
+func (p *Pipeline) Start(parent context.Context) error {
+	ctx, cancel := context.WithCancel(parent)
+	p.stop = cancel
+
+	if err := p.capturer.Start(ctx); err != nil {
+		cancel()
+		return err
+	}
+	p.tracker.Start()
+	p.reassembler.Start()
+
+	p.wg.Add(1)
+	go p.captureForwarder(ctx)
+
+	p.wg.Add(1)
+	go p.captureErrors(ctx)
+
+	for i := 0; i < p.cfg.Workers; i++ {
+		p.wg.Add(1)
+		go p.worker(ctx, i)
+	}
+
+	log.Printf("DPI started iface=%s workers=%d rules=%d", p.cfg.Interface, p.cfg.Workers, len(p.ruleEngine.Rules()))
+	return nil
+}
+
+func (p *Pipeline) Stop() {
+	if p.stop != nil {
+		p.stop()
+	}
+	p.capturer.Close()
+	p.tracker.Stop()
+	p.reassembler.Stop()
+	p.wg.Wait()
+	log.Printf("DPI stopped")
+}
+
+func (p *Pipeline) captureForwarder(ctx context.Context) {
+	defer p.wg.Done()
+	defer close(p.inputCh)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case pkt, ok := <-p.capturer.Packets():
+			if !ok {
+				return
+			}
+			select {
+			case p.inputCh <- pkt:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}
+}
+
+func (p *Pipeline) captureErrors(ctx context.Context) {
+	defer p.wg.Done()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case err, ok := <-p.capturer.Errors():
+			if !ok {
+				return
+			}
+			log.Printf("DPI capture error: %v", err)
+		}
+	}
+}
+
+func (p *Pipeline) worker(ctx context.Context, id int) {
+	defer p.wg.Done()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case pkt, ok := <-p.inputCh:
+			if !ok {
+				return
+			}
+			decoded, err := p.decoder.Decode(pkt)
+			if err != nil {
+				if err == types.ErrUnsupportedPacket || err == types.ErrMalformedPacket {
+					continue
+				}
+				continue
+			}
+
+			if p.tracker.IsRateLimited(decoded.Tuple.SrcIP) {
+				res := types.InspectResult{Timestamp: decoded.Timestamp, Tuple: decoded.Tuple, Protocol: decoded.Tuple.Protocol, Detections: []string{"rate_limit"}}
+				p.actions.Handle(res, rules.Decision{Action: types.ActionBlock, Type: "rate_limit", Reason: "source rate exceeded"})
+				continue
+			}
+
+			p.tracker.Touch(decoded.Tuple, len(decoded.Payload))
+			payloads, err := p.reassembler.Process(decoded)
+			if err != nil {
+				log.Printf("DPI worker=%d reassembly error: %v", id, err)
+				continue
+			}
+
+			for _, item := range payloads {
+				result := p.inspector.Inspect(item)
+				decision := p.ruleEngine.Evaluate(result)
+				p.actions.Handle(result, decision)
+			}
+		}
+	}
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}

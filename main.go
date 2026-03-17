@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -11,14 +12,19 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
+	"strings"
 
 	"kaliwall/internal/analytics"
 	"kaliwall/internal/api"
 	"kaliwall/internal/database"
+	"kaliwall/internal/dpi/pipeline"
 	"kaliwall/internal/firewall"
 	"kaliwall/internal/logger"
 	"kaliwall/internal/netmon"
 	"kaliwall/internal/threatintel"
+
+	"github.com/google/gopacket/pcap"
 )
 
 const (
@@ -31,6 +37,13 @@ const (
 func main() {
 	// CLI flags
 	daemon := flag.Bool("daemon", false, "Run in background daemon mode")
+	dpiEnable := flag.Bool("dpi", false, "Enable deep packet inspection pipeline")
+	dpiIface := flag.String("dpi-interface", "", "Network interface for DPI capture (e.g. eth0)")
+	dpiRules := flag.String("dpi-rules", "configs/dpi-rules.yaml", "Path to DPI rules file (yaml/json)")
+	dpiWorkers := flag.Int("dpi-workers", 0, "Number of DPI workers (default: CPU cores)")
+	dpiPromisc := flag.Bool("dpi-promisc", true, "Enable promiscuous capture mode for DPI")
+	dpiBPF := flag.String("dpi-bpf", "", "Optional BPF filter for DPI capture")
+	dpiRateLimit := flag.Int("dpi-rate", 5000, "Per-source packet rate limit per second")
 	flag.Parse()
 
 	// If --daemon, fork to background
@@ -83,6 +96,38 @@ func main() {
 	analyticsService := analytics.New(trafficLogger)
 	analyticsService.Start()
 
+	var dpiPipe *pipeline.Pipeline
+	if *dpiEnable {
+		iface := *dpiIface
+		if iface == "" {
+			iface = defaultCaptureInterface()
+		}
+		if iface == "" {
+			log.Fatalf("DPI enabled but no usable capture interface found")
+		}
+		dpiCfg := pipeline.Config{
+			Interface:       iface,
+			Promiscuous:     *dpiPromisc,
+			BPF:             *dpiBPF,
+			RulesPath:       *dpiRules,
+			Workers:         *dpiWorkers,
+			FlowTimeout:     2 * time.Minute,
+			CleanupInterval: 30 * time.Second,
+			MaxFlowBytes:    1 << 20,
+			MaxWindowBytes:  8192,
+			RateLimitPerSec: *dpiRateLimit,
+		}
+		var err error
+		dpiPipe, err = pipeline.New(dpiCfg, trafficLogger)
+		if err != nil {
+			log.Fatalf("Failed to initialize DPI: %v", err)
+		}
+		if err := dpiPipe.Start(context.Background()); err != nil {
+			log.Fatalf("Failed to start DPI: %v", err)
+		}
+		fmt.Printf("[+] DPI enabled on interface: %s\n", iface)
+	}
+
 	// Initialize REST API and web server
 	handler := api.NewRouter(fw, trafficLogger, ti, analyticsService)
 
@@ -102,6 +147,9 @@ func main() {
 
 	<-stop
 	fmt.Println("\n[*] Shutting down KaliWall daemon...")
+	if dpiPipe != nil {
+		dpiPipe.Stop()
+	}
 	monitor.Stop()
 	analyticsService.Stop()
 	// Persist VT key
@@ -109,6 +157,28 @@ func main() {
 		db.SetSetting("vt_api_key", key)
 	}
 	trafficLogger.Log("SYSTEM", "-", "-", "-", "Daemon stopped")
+}
+
+func defaultCaptureInterface() string {
+	devs, err := pcap.FindAllDevs()
+	if err != nil {
+		return ""
+	}
+	for _, d := range devs {
+		if d.Name == "" {
+			continue
+		}
+		if strings.HasPrefix(d.Name, "lo") || strings.Contains(strings.ToLower(d.Description), "loopback") {
+			continue
+		}
+		if len(d.Addresses) > 0 {
+			return d.Name
+		}
+	}
+	if len(devs) > 0 {
+		return devs[0].Name
+	}
+	return ""
 }
 
 // runDaemon forks the process into background.
