@@ -166,7 +166,6 @@
                 loadAnalytics();
                 startBandwidthStream();
                 startDashboardAutoRefresh();
-                loadSOCDashboard();
                 break;
             case "rules":
                 loadRules();
@@ -1696,6 +1695,8 @@
     document.getElementById("btnRefreshDNSStats").addEventListener("click", () => loadDNSStats());
     document.getElementById("btnRefreshDPIStatus").addEventListener("click", () => loadDPIStatus());
     document.getElementById("btnToggleDPI").addEventListener("click", () => toggleDPI());
+    document.getElementById("btnFirewallStop").addEventListener("click", () => stopFirewallFromTopbar());
+    document.getElementById("btnFirewallRestart").addEventListener("click", () => restartFirewallFromTopbar());
 
     document.getElementById("btnClearDNSCache").addEventListener("click", async function () {
         const res = await fetch(API + "/dns/cache", { method: "DELETE" });
@@ -1832,6 +1833,57 @@
             status.className = "badge badge-reject";
             status.textContent = "Engine warning: " + res.data.last_error;
         }
+    }
+
+    async function stopFirewallFromTopbar() {
+        if (!confirm("Switch firewall to memory mode (stop live backend)?")) return;
+        var res = await fetch(API + "/firewall/engine", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ engine: "memory" }),
+        });
+        var data = await res.json();
+        if (!data.success) {
+            toast(data.message || "Failed to stop firewall", "error");
+            return;
+        }
+        toast("Firewall switched to memory mode", "success");
+        loadFirewallEngineSettings();
+        loadStats();
+    }
+
+    async function restartFirewallFromTopbar() {
+        var info = await apiFetch("/firewall/engine");
+        if (!info.success) {
+            toast("Failed to read firewall status", "error");
+            return;
+        }
+        var engines = (info.data && info.data.available_engines) || [];
+        var target = "memory";
+        for (var i = 0; i < engines.length; i++) {
+            var name = String(engines[i] || "").toLowerCase();
+            if (name && name !== "memory") {
+                target = name;
+                break;
+            }
+        }
+        if (target === "memory") {
+            toast("No live backend available to restart", "error");
+            return;
+        }
+        var res = await fetch(API + "/firewall/engine", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ engine: target }),
+        });
+        var data = await res.json();
+        if (!data.success) {
+            toast(data.message || "Failed to restart firewall", "error");
+            return;
+        }
+        toast("Firewall restarted on " + target, "success");
+        loadFirewallEngineSettings();
+        loadStats();
     }
 
     document.getElementById("btnSaveFirewallEngine").addEventListener("click", async function () {
