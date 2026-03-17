@@ -9,6 +9,7 @@
     var firewallEventSource = null;
     var maxEventRows = 120;
     var peerHostMap = {};
+    var dpiRunning = false;
     const SIDEBAR_WIDTH_KEY = "kaliwall_sidebar_width";
 
     // ---------- Theme Management ----------
@@ -250,10 +251,15 @@
     }
 
     async function loadDPIStatus() {
-        const res = await apiFetch("/dpi/status");
-        if (!res.success) return;
-        const s = res.data || {};
+        let res;
+        try {
+            res = await apiFetch("/dpi/status");
+        } catch (_err) {
+            res = { success: false, data: { enabled: false, running: false } };
+        }
+        const s = (res && res.data) || { enabled: false, running: false };
         const on = !!s.enabled && !!s.running;
+        dpiRunning = on;
         setText("dpiStatusText", on ? "ON" : "OFF");
         setText("dpiPacketsSeen", s.packets_seen || 0);
         setText("dpiBlockedCount", s.blocked || 0);
@@ -266,6 +272,41 @@
 
         const statusEl = document.getElementById("dpiStatusText");
         if (statusEl) statusEl.style.color = on ? "var(--color-success)" : "var(--color-danger)";
+
+        const btn = document.getElementById("btnToggleDPI");
+        if (btn) {
+            btn.innerHTML = on
+                ? '<i class="fa-solid fa-power-off"></i> Turn OFF DPI'
+                : '<i class="fa-solid fa-power-off"></i> Turn ON DPI';
+            btn.classList.toggle("btn-danger", on);
+            btn.classList.toggle("btn-primary", !on);
+            btn.disabled = false;
+        }
+
+        if (!res.success && res.message) {
+            toast(res.message, "error");
+        }
+    }
+
+    async function toggleDPI() {
+        const btn = document.getElementById("btnToggleDPI");
+        const nextEnabled = !dpiRunning;
+        if (btn) btn.disabled = true;
+        try {
+            const resp = await fetch(API + "/dpi/control", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ enabled: nextEnabled }),
+            });
+            const data = await resp.json();
+            if (!data.success) {
+                throw new Error(data.message || "Failed to toggle DPI");
+            }
+            toast(data.message || (nextEnabled ? "DPI enabled" : "DPI disabled"), "success");
+        } catch (err) {
+            toast(err.message || "Failed to toggle DPI", "error");
+        }
+        await loadDPIStatus();
     }
 
     function initSidebarWidthControls() {
@@ -928,6 +969,7 @@
     document.getElementById("btnRefreshLogs").addEventListener("click", () => loadLogs());
     document.getElementById("btnRefreshDNSStats").addEventListener("click", () => loadDNSStats());
     document.getElementById("btnRefreshDPIStatus").addEventListener("click", () => loadDPIStatus());
+    document.getElementById("btnToggleDPI").addEventListener("click", () => toggleDPI());
 
     document.getElementById("btnClearDNSCache").addEventListener("click", async function () {
         const res = await fetch(API + "/dns/cache", { method: "DELETE" });

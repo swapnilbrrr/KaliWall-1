@@ -161,6 +161,9 @@ func (p *Pipeline) Stop() {
 
 // Status returns pipeline runtime metrics for API/dashboard.
 func (p *Pipeline) Status() Status {
+	if p == nil {
+		return Status{Enabled: false, Running: false}
+	}
 	uptime := 0.0
 	if !p.startedAt.IsZero() {
 		uptime = time.Since(p.startedAt).Seconds()

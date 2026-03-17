@@ -22,6 +22,14 @@ cd "$SCRIPT_DIR"
 PID_FILE="kaliwall.pid"
 LOG_FILE="logs/kaliwall-daemon.log"
 MAX_LOG_SIZE=$((5 * 1024 * 1024))
+DPI_ARGS=("--dpi" "--dpi-rules" "configs/dpi-rules.yaml")
+
+if [[ "${KALIWALL_DPI:-1}" == "0" ]]; then
+    DPI_ARGS=()
+fi
+if [[ -n "${KALIWALL_DPI_INTERFACE:-}" ]]; then
+    DPI_ARGS+=("--dpi-interface" "${KALIWALL_DPI_INTERFACE}")
+fi
 
 usage() {
     cat <<EOF
@@ -73,7 +81,7 @@ case "${1:-}" in
         fi
         rotate_log_if_needed
         echo -e "${GREEN}[+] Starting KaliWall in daemon mode...${NC}"
-        nohup ./kaliwall > "$LOG_FILE" 2>&1 &
+        nohup ./kaliwall "${DPI_ARGS[@]}" > "$LOG_FILE" 2>&1 &
         DAEMON_PID=$!
         echo "$DAEMON_PID" > "$PID_FILE"
         echo -e "${GREEN}[+] KaliWall started (PID: ${DAEMON_PID})${NC}"
@@ -147,7 +155,7 @@ case "${1:-}" in
         echo -e "${GREEN}[+] Starting KaliWall...${NC}"
         echo -e "${GREEN}[+] Web UI: http://localhost:8080${NC}"
         echo -e "${YELLOW}[!] Run with sudo for live firewall integration${NC}"
-        ./kaliwall
+        ./kaliwall "${DPI_ARGS[@]}"
         ;;
     *)
         usage

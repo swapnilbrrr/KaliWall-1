@@ -3,10 +3,14 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log"
 	"net/http"
+	"runtime/debug"
 	"strconv"
 	"strings"
+	"sync"
 
 	"kaliwall/internal/analytics"
 	"kaliwall/internal/dpi/pipeline"
@@ -21,8 +25,64 @@ type dpiStatusProvider interface {
 	Status() pipeline.Status
 }
 
+type dpiControlProvider interface {
+	SetEnabled(enabled bool) error
+}
+
+// DPIProvider provides synchronized access to an optional DPI pipeline.
+type DPIProvider struct {
+	mu       sync.RWMutex
+	provider dpiStatusProvider
+}
+
+// NewDPIProvider constructs a thread-safe holder for the DPI dependency.
+func NewDPIProvider(provider dpiStatusProvider) *DPIProvider {
+	p := &DPIProvider{}
+	p.Set(provider)
+	return p
+}
+
+// Set updates the active DPI provider (safe for async initialization paths).
+func (p *DPIProvider) Set(provider dpiStatusProvider) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.provider = provider
+}
+
+// Status returns DPI status and whether a provider is available.
+func (p *DPIProvider) Status() (pipeline.Status, bool) {
+	if p == nil {
+		return pipeline.Status{Enabled: false, Running: false}, false
+	}
+	p.mu.RLock()
+	provider := p.provider
+	p.mu.RUnlock()
+	if provider == nil {
+		return pipeline.Status{Enabled: false, Running: false}, false
+	}
+	return provider.Status(), true
+}
+
+// SetEnabled toggles DPI on/off if the provider supports lifecycle control.
+func (p *DPIProvider) SetEnabled(enabled bool) error {
+	if p == nil {
+		return errors.New("DPI provider unavailable")
+	}
+	p.mu.RLock()
+	provider := p.provider
+	p.mu.RUnlock()
+	if provider == nil {
+		return errors.New("DPI provider unavailable")
+	}
+	ctrl, ok := provider.(dpiControlProvider)
+	if !ok {
+		return errors.New("DPI control not supported")
+	}
+	return ctrl.SetEnabled(enabled)
+}
+
 // NewRouter creates the HTTP mux with all API routes and static file serving.
-func NewRouter(fw *firewall.Engine, tl *logger.TrafficLogger, ti *threatintel.Service, an *analytics.Service, dpi dpiStatusProvider) http.Handler {
+func NewRouter(fw *firewall.Engine, tl *logger.TrafficLogger, ti *threatintel.Service, an *analytics.Service, dpi *DPIProvider) http.Handler {
 	mux := http.NewServeMux()
 
 	h := &handlers{fw: fw, logger: tl, threat: ti, analytics: an, dpi: dpi}
@@ -55,12 +115,41 @@ func NewRouter(fw *firewall.Engine, tl *logger.TrafficLogger, ti *threatintel.Se
 	mux.HandleFunc("/api/v1/dns/cache", h.handleDNSCache)
 	mux.HandleFunc("/api/v1/dns/refresh", h.handleDNSRefresh)
 	mux.HandleFunc("/api/v1/dpi/status", h.handleDPIStatus)
+	mux.HandleFunc("/api/v1/dpi/control", h.handleDPIControl)
 
 	// Serve web UI from the "web" directory
 	fs := http.FileServer(http.Dir("web"))
 	mux.Handle("/", fs)
 
-	return mux
+	return withRecovery(mux)
+}
+
+func (h *handlers) handleDPIControl(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	if h.dpi == nil {
+		respond(w, http.StatusServiceUnavailable, models.APIResponse{Success: false, Message: "DPI pipeline unavailable"})
+		return
+	}
+	var body struct {
+		Enabled *bool `json:"enabled"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Enabled == nil {
+		respond(w, http.StatusBadRequest, models.APIResponse{Success: false, Message: "enabled is required"})
+		return
+	}
+	if err := h.dpi.SetEnabled(*body.Enabled); err != nil {
+		respond(w, http.StatusServiceUnavailable, models.APIResponse{Success: false, Message: err.Error()})
+		return
+	}
+	status, _ := h.dpi.Status()
+	msg := "DPI disabled"
+	if *body.Enabled {
+		msg = "DPI enabled"
+	}
+	respond(w, http.StatusOK, models.APIResponse{Success: true, Message: msg, Data: status})
 }
 
 func (h *handlers) handleDPIStatus(w http.ResponseWriter, r *http.Request) {
@@ -68,14 +157,16 @@ func (h *handlers) handleDPIStatus(w http.ResponseWriter, r *http.Request) {
 		methodNotAllowed(w)
 		return
 	}
-	if h.dpi == nil {
-		respond(w, http.StatusOK, models.APIResponse{Success: true, Data: map[string]interface{}{
-			"enabled": false,
-			"running": false,
-		}})
+	status, ok := h.dpi.Status()
+	if !ok {
+		respond(w, http.StatusServiceUnavailable, models.APIResponse{
+			Success: false,
+			Message: "DPI pipeline unavailable",
+			Data:    pipeline.Status{Enabled: false, Running: false},
+		})
 		return
 	}
-	respond(w, http.StatusOK, models.APIResponse{Success: true, Data: h.dpi.Status()})
+	respond(w, http.StatusOK, models.APIResponse{Success: true, Data: status})
 }
 
 // ---------- Firewall Engine & Visibility ----------
@@ -237,7 +328,7 @@ type handlers struct {
 	logger    *logger.TrafficLogger
 	threat    *threatintel.Service
 	analytics *analytics.Service
-	dpi       dpiStatusProvider
+	dpi       *DPIProvider
 }
 
 // ---------- Rules ----------
@@ -658,5 +749,20 @@ func methodNotAllowed(w http.ResponseWriter) {
 	respond(w, http.StatusMethodNotAllowed, models.APIResponse{
 		Success: false,
 		Message: "Method not allowed",
+	})
+}
+
+func withRecovery(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if rec := recover(); rec != nil {
+				log.Printf("panic recovered method=%s path=%s err=%v\n%s", r.Method, r.URL.Path, rec, debug.Stack())
+				respond(w, http.StatusInternalServerError, models.APIResponse{
+					Success: false,
+					Message: "internal server error",
+				})
+			}
+		}()
+		next.ServeHTTP(w, r)
 	})
 }

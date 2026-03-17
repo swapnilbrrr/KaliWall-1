@@ -97,39 +97,36 @@ func main() {
 	analyticsService.Start()
 
 	var dpiPipe *pipeline.Pipeline
+	dpiProvider := api.NewDPIProvider(nil)
+	resolvedIface := *dpiIface
+	if resolvedIface == "" {
+		resolvedIface = defaultCaptureInterface()
+	}
+	dpiCfg := pipeline.Config{
+		Interface:       resolvedIface,
+		Promiscuous:     *dpiPromisc,
+		BPF:             *dpiBPF,
+		RulesPath:       *dpiRules,
+		Workers:         *dpiWorkers,
+		FlowTimeout:     2 * time.Minute,
+		CleanupInterval: 30 * time.Second,
+		MaxFlowBytes:    1 << 20,
+		MaxWindowBytes:  8192,
+		RateLimitPerSec: *dpiRateLimit,
+	}
+	dpiManager := pipeline.NewManager(dpiCfg, trafficLogger)
+	dpiProvider.Set(dpiManager)
 	if *dpiEnable {
-		iface := *dpiIface
-		if iface == "" {
-			iface = defaultCaptureInterface()
+		if err := dpiManager.SetEnabled(true); err != nil {
+			log.Printf("DPI requested but failed to start: %v", err)
+		} else {
+			dpiPipe = nil
+			fmt.Printf("[+] DPI enabled on interface: %s\n", resolvedIface)
 		}
-		if iface == "" {
-			log.Fatalf("DPI enabled but no usable capture interface found")
-		}
-		dpiCfg := pipeline.Config{
-			Interface:       iface,
-			Promiscuous:     *dpiPromisc,
-			BPF:             *dpiBPF,
-			RulesPath:       *dpiRules,
-			Workers:         *dpiWorkers,
-			FlowTimeout:     2 * time.Minute,
-			CleanupInterval: 30 * time.Second,
-			MaxFlowBytes:    1 << 20,
-			MaxWindowBytes:  8192,
-			RateLimitPerSec: *dpiRateLimit,
-		}
-		var err error
-		dpiPipe, err = pipeline.New(dpiCfg, trafficLogger)
-		if err != nil {
-			log.Fatalf("Failed to initialize DPI: %v", err)
-		}
-		if err := dpiPipe.Start(context.Background()); err != nil {
-			log.Fatalf("Failed to start DPI: %v", err)
-		}
-		fmt.Printf("[+] DPI enabled on interface: %s\n", iface)
 	}
 
 	// Initialize REST API and web server
-	handler := api.NewRouter(fw, trafficLogger, ti, analyticsService, dpiPipe)
+	handler := api.NewRouter(fw, trafficLogger, ti, analyticsService, dpiProvider)
 
 	// Graceful shutdown on SIGINT/SIGTERM
 	stop := make(chan os.Signal, 1)
@@ -150,6 +147,7 @@ func main() {
 	if dpiPipe != nil {
 		dpiPipe.Stop()
 	}
+	dpiManager.Stop()
 	monitor.Stop()
 	analyticsService.Stop()
 	// Persist VT key
