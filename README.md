@@ -72,6 +72,22 @@ chmod +x start.sh && ./start.sh
 sudo ./start.sh --daemon
 ```
 
+### Logs and Status
+
+```bash
+# Show daemon status
+./start.sh --status
+
+# Show latest logs
+./start.sh --logs
+
+# Follow logs live
+./start.sh --logs-follow
+
+# Stop daemon
+./start.sh --stop
+```
+
 ### Systemd Service
 
 ```bash

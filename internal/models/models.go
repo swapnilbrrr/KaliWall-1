@@ -92,6 +92,13 @@ type NameCount struct {
 	Count int    `json:"count"`
 }
 
+// ResolvedPeer contains connection count and reverse DNS hostname for an IP.
+type ResolvedPeer struct {
+	IP    string `json:"ip"`
+	Host  string `json:"host"`
+	Count int    `json:"count"`
+}
+
 // TrafficVisibility provides low-overhead packet/flow visibility for the UI.
 type TrafficVisibility struct {
 	CaptureSource      string      `json:"capture_source"`
@@ -100,6 +107,7 @@ type TrafficVisibility struct {
 	TopProtocols       []NameCount `json:"top_protocols"`
 	TopRemoteIPs       []NameCount `json:"top_remote_ips"`
 	TopDestinationPorts []NameCount `json:"top_destination_ports"`
+	ResolvedPeers      []ResolvedPeer `json:"resolved_peers"`
 	RecentBlocked      int         `json:"recent_blocked"`
 	RecentAllowed      int         `json:"recent_allowed"`
 }

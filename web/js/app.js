@@ -82,19 +82,29 @@
         settings: "Settings",
     };
 
+    function goToPage(target) {
+        if (!target || !document.getElementById("page-" + target)) return;
+        navItems.forEach((n) => n.classList.toggle("active", n.dataset.page === target));
+        pages.forEach((p) => p.classList.remove("active"));
+        document.getElementById("page-" + target).classList.add("active");
+        pageTitle.textContent = pageTitles[target] || "KaliWall";
+        sidebar.classList.remove("open");
+        if (target !== "logs") stopLogStream();
+        loadPageData(target);
+    }
+
     navItems.forEach((item) => {
         item.addEventListener("click", (e) => {
             e.preventDefault();
-            const target = item.dataset.page;
-            navItems.forEach((n) => n.classList.remove("active"));
-            item.classList.add("active");
-            pages.forEach((p) => p.classList.remove("active"));
-            document.getElementById("page-" + target).classList.add("active");
-            pageTitle.textContent = pageTitles[target] || "KaliWall";
-            sidebar.classList.remove("open");
-            // Stop log stream when leaving the logs page
-            if (target !== "logs") stopLogStream();
-            loadPageData(target);
+            goToPage(item.dataset.page);
+        });
+    });
+
+    // Dashboard quick navigation cards
+    document.querySelectorAll("[data-page-target]").forEach((el) => {
+        el.style.cursor = "pointer";
+        el.addEventListener("click", function () {
+            goToPage(el.getAttribute("data-page-target"));
         });
     });
 
@@ -108,7 +118,6 @@
                 loadStats();
                 loadSysInfo();
                 loadTrafficVisibility();
-                loadFirewallLogs();
                 loadDashboardLogs();
                 loadDashboardConnections();
                 loadAnalytics();
@@ -206,15 +215,23 @@
             tr.innerHTML = "<td>" + escapeHtml(p.name) + "</td><td>" + (p.count || 0) + "</td>";
             tbody.appendChild(tr);
         });
-    }
 
-    async function loadFirewallLogs() {
-        const res = await apiFetch("/firewall/logs?limit=120");
-        if (!res.success) return;
-        const logBox = document.getElementById("firewallLogs");
-        if (!logBox) return;
-        const lines = res.data || [];
-        logBox.textContent = lines.join("\n");
+        const peersTbody = document.querySelector("#visPeersTable tbody");
+        if (!peersTbody) return;
+        peersTbody.innerHTML = "";
+        const peers = v.resolved_peers || [];
+        if (peers.length === 0) {
+            peersTbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:#9ca3af">No active remote host data</td></tr>';
+            return;
+        }
+        peers.forEach(function (peer) {
+            const tr = document.createElement("tr");
+            tr.innerHTML =
+                "<td><strong>" + escapeHtml(peer.ip) + "</strong></td>" +
+                "<td>" + escapeHtml(peer.host || "unresolved") + "</td>" +
+                "<td>" + (peer.count || 0) + "</td>";
+            peersTbody.appendChild(tr);
+        });
     }
 
     // Set a circular SVG gauge by percentage (0-100).
@@ -824,7 +841,7 @@
             toast("Firewall engine switched to " + engine, "success");
             loadFirewallEngineSettings();
             loadStats();
-            loadFirewallLogs();
+            loadTrafficVisibility();
         } else {
             toast(data.message || "Failed to switch engine", "error");
         }
@@ -1269,5 +1286,5 @@
     });
 
     // ---------- Initial Load ----------
-    loadPageData("dashboard");
+    goToPage("dashboard");
 })();

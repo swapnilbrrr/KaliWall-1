@@ -94,9 +94,9 @@
                     <div class="card-header"><i class="fa-solid fa-radar"></i><h3>Traffic Visibility</h3></div>
                     <div class="card-body">
                         <div class="stats-grid" style="margin-bottom:12px">
-                            <div class="stat-card"><div class="stat-info"><span class="stat-value" id="visConnections">0</span><span class="stat-label">Active Connections</span></div></div>
-                            <div class="stat-card"><div class="stat-info"><span class="stat-value" id="visRemoteIPs">0</span><span class="stat-label">Unique Remote IPs</span></div></div>
-                            <div class="stat-card"><div class="stat-info"><span class="stat-value" id="visBlocked">0</span><span class="stat-label">Recent Blocked</span></div></div>
+                            <div class="stat-card" data-page-target="connections"><div class="stat-info"><span class="stat-value" id="visConnections">0</span><span class="stat-label">Active Connections</span></div></div>
+                            <div class="stat-card" data-page-target="connections"><div class="stat-info"><span class="stat-value" id="visRemoteIPs">0</span><span class="stat-label">Unique Remote IPs</span></div></div>
+                            <div class="stat-card" data-page-target="blocked"><div class="stat-info"><span class="stat-value" id="visBlocked">0</span><span class="stat-label">Recent Blocked</span></div></div>
                             <div class="stat-card"><div class="stat-info"><span class="stat-value" id="visAllowed">0</span><span class="stat-label">Recent Allowed</span></div></div>
                         </div>
                         <table class="table" id="visTopProtocols">
@@ -106,30 +106,33 @@
                     </div>
                 </div>
                 <div class="card">
-                    <div class="card-header"><i class="fa-solid fa-file-shield"></i><h3>Firewall Backend Logs</h3></div>
+                    <div class="card-header"><i class="fa-solid fa-earth-asia"></i><h3>Connected Hosts (nslookup)</h3></div>
                     <div class="card-body">
-                        <div id="firewallLogs" style="max-height:260px;overflow:auto;font-family:monospace;font-size:12px;line-height:1.5"></div>
+                        <table class="table" id="visPeersTable">
+                            <thead><tr><th>Remote IP</th><th>Host</th><th>Connections</th></tr></thead>
+                            <tbody></tbody>
+                        </table>
                     </div>
                 </div>
             </div>
 
             <!-- Stat Cards -->
             <div class="stats-grid">
-                <div class="stat-card">
+                <div class="stat-card" data-page-target="rules">
                     <div class="stat-icon bg-blue"><i class="fa-solid fa-list"></i></div>
                     <div class="stat-info">
                         <span class="stat-value" id="statTotalRules">0</span>
                         <span class="stat-label">Total Rules</span>
                     </div>
                 </div>
-                <div class="stat-card">
+                <div class="stat-card" data-page-target="rules">
                     <div class="stat-icon bg-green"><i class="fa-solid fa-toggle-on"></i></div>
                     <div class="stat-info">
                         <span class="stat-value" id="statActiveRules">0</span>
                         <span class="stat-label">Active Rules</span>
                     </div>
                 </div>
-                <div class="stat-card">
+                <div class="stat-card" data-page-target="blocked">
                     <div class="stat-icon bg-red"><i class="fa-solid fa-ban"></i></div>
                     <div class="stat-info">
                         <span class="stat-value" id="statBlocked">0</span>
@@ -143,7 +146,7 @@
                         <span class="stat-label">Allowed Today</span>
                     </div>
                 </div>
-                <div class="stat-card">
+                <div class="stat-card" data-page-target="connections">
                     <div class="stat-icon bg-orange"><i class="fa-solid fa-plug"></i></div>
                     <div class="stat-info">
                         <span class="stat-value" id="statConnections">0</span>

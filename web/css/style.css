@@ -964,12 +964,9 @@ body {
     cursor: default;
 }
 
-#firewallLogs {
-    background: var(--bg-body);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius);
-    padding: 12px;
-    color: var(--text-secondary);
-    white-space: pre-wrap;
-    word-break: break-word;
+#visPeersTable td:nth-child(2) {
+    max-width: 280px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }

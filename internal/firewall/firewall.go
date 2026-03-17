@@ -5,6 +5,7 @@ package firewall
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"net"
 	"os"
@@ -41,11 +42,22 @@ type Engine struct {
 	available []string
 	root      bool
 	lastError string
+	dnsMu      sync.RWMutex
+	dnsCache   map[string]dnsCacheEntry
+	nslookup   string
+}
+
+type dnsCacheEntry struct {
+	host    string
+	expires time.Time
 }
 
 // New creates a new firewall engine and detects whether live iptables mode is available.
 func New(l *logger.TrafficLogger, db *database.Store) *Engine {
-	e := &Engine{rules: make([]models.Rule, 0), logger: l, db: db, backend: engineMemory}
+	e := &Engine{rules: make([]models.Rule, 0), logger: l, db: db, backend: engineMemory, dnsCache: make(map[string]dnsCacheEntry)}
+	if path, err := exec.LookPath("nslookup"); err == nil {
+		e.nslookup = path
+	}
 	e.detectMode()
 
 	// Load persisted rules from database
@@ -500,17 +512,87 @@ func (e *Engine) TrafficVisibility(limit int) models.TrafficVisibility {
 	e.mu.RLock()
 	backend := e.backend
 	e.mu.RUnlock()
+	topRemote := topCounts(remoteCounts, 10)
+	resolved := make([]models.ResolvedPeer, 0, len(topRemote))
+	for i, item := range topRemote {
+		if i >= 8 {
+			break
+		}
+		resolved = append(resolved, models.ResolvedPeer{
+			IP:    item.Name,
+			Host:  e.resolveHost(item.Name),
+			Count: item.Count,
+		})
+	}
 
 	return models.TrafficVisibility{
 		CaptureSource:       fmt.Sprintf("%s + /proc net sniffer", backend),
 		ActiveConnections:   len(conns),
 		UniqueRemoteIPs:     len(uniqueRemote),
 		TopProtocols:        topCounts(protoCounts, 6),
-		TopRemoteIPs:        topCounts(remoteCounts, 10),
+		TopRemoteIPs:        topRemote,
 		TopDestinationPorts: topCounts(portCounts, 10),
+		ResolvedPeers:       resolved,
 		RecentBlocked:       blocked,
 		RecentAllowed:       allowed,
 	}
+}
+
+func (e *Engine) resolveHost(ip string) string {
+	if ip == "" || ip == "0.0.0.0" || ip == "::" {
+		return "-"
+	}
+	parsed := net.ParseIP(ip)
+	if parsed == nil {
+		return "-"
+	}
+	if parsed.IsLoopback() || parsed.IsPrivate() {
+		return "local/private"
+	}
+
+	now := time.Now()
+	e.dnsMu.RLock()
+	if ent, ok := e.dnsCache[ip]; ok && ent.expires.After(now) {
+		e.dnsMu.RUnlock()
+		return ent.host
+	}
+	e.dnsMu.RUnlock()
+
+	host := "unresolved"
+	if e.nslookup != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 1200*time.Millisecond)
+		defer cancel()
+		out, err := exec.CommandContext(ctx, e.nslookup, ip).CombinedOutput()
+		if err == nil {
+			for _, line := range strings.Split(string(out), "\n") {
+				l := strings.TrimSpace(line)
+				if strings.Contains(l, "name =") {
+					parts := strings.SplitN(l, "=", 2)
+					if len(parts) == 2 {
+						host = strings.TrimSuffix(strings.TrimSpace(parts[1]), ".")
+						break
+					}
+				}
+				if strings.HasPrefix(strings.ToLower(l), "name:") {
+					host = strings.TrimSpace(strings.TrimPrefix(l, "Name:"))
+					host = strings.TrimSpace(strings.TrimPrefix(host, "name:"))
+					host = strings.TrimSuffix(host, ".")
+					break
+				}
+			}
+		}
+	}
+
+	if host == "unresolved" {
+		if names, err := net.LookupAddr(ip); err == nil && len(names) > 0 {
+			host = strings.TrimSuffix(strings.TrimSpace(names[0]), ".")
+		}
+	}
+
+	e.dnsMu.Lock()
+	e.dnsCache[ip] = dnsCacheEntry{host: host, expires: now.Add(10 * time.Minute)}
+	e.dnsMu.Unlock()
+	return host
 }
 
 // ---------- Statistics ----------
