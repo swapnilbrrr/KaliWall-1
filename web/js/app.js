@@ -5,6 +5,63 @@
     "use strict";
 
     const API = "/api/v1";
+    var bandwidthChart = null; // Hoisted for theme access
+
+    // ---------- Theme Management ----------
+    const themeToggle = document.getElementById("themeToggle");
+    const html = document.documentElement;
+    
+    function initTheme() {
+        const savedTheme = localStorage.getItem("theme");
+        const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+        const theme = savedTheme ? savedTheme : (prefersDark ? "dark" : "light");
+        setTheme(theme);
+    }
+
+    function setTheme(theme) {
+        html.setAttribute("data-theme", theme);
+        localStorage.setItem("theme", theme);
+        
+        // Update icon
+        if (themeToggle) {
+            themeToggle.innerHTML = theme === "dark" 
+                ? '<i class="fa-solid fa-sun"></i>' 
+                : '<i class="fa-solid fa-moon"></i>';
+        }
+
+        // Update Chart.js defaults
+        const textColor = theme === "dark" ? "#9ca3af" : "#4b5563";
+        const gridColor = theme === "dark" ? "#334155" : "#e5e7eb";
+        
+        if (window.Chart) {
+            Chart.defaults.color = textColor;
+            Chart.defaults.borderColor = gridColor;
+        }
+        
+        // Update active chart if exists
+        if (bandwidthChart) {
+            bandwidthChart.options.scales.x.grid.color = gridColor;
+            bandwidthChart.options.scales.y.grid.color = gridColor;
+            bandwidthChart.options.scales.x.ticks.color = textColor;
+            bandwidthChart.options.scales.y.ticks.color = textColor;
+            bandwidthChart.update('none');
+        }
+
+        // Update gauges
+        document.querySelectorAll(".gauge-bg").forEach(bg => {
+            bg.style.stroke = theme === "dark" ? "#334155" : "#f3f4f6";
+        });
+    }
+
+    if (themeToggle) {
+        themeToggle.addEventListener("click", () => {
+            const current = html.getAttribute("data-theme");
+            setTheme(current === "dark" ? "light" : "dark");
+        });
+    }
+
+    // Initialize theme immediately
+    initTheme();
 
     // ---------- Navigation ----------
 
@@ -766,7 +823,7 @@
 
     // ---------- Live Charts (Chart.js) ----------
 
-    var bandwidthChart = null;
+    // var bandwidthChart = null; // Hoisted
     var protocolChart = null;
     var blockedAllowedChart = null;
     var topTalkersChart = null;
@@ -1065,6 +1122,58 @@
         el.className = "toast show " + (type || "");
         setTimeout(() => (el.className = "toast"), 3000);
     }
+
+    // ---------- Global Table Sorting ----------
+    document.addEventListener("click", function(e) {
+        if (!e.target.matches("th") && !e.target.parentNode.matches("th")) return;
+        const th = e.target.matches("th") ? e.target : e.target.parentNode;
+        const table = th.closest("table");
+        if (!table) return;
+        
+        const tbody = table.querySelector("tbody");
+        if (!tbody || tbody.rows.length < 2) return;
+        
+        const index = Array.from(th.parentNode.children).indexOf(th);
+        const asc = th.getAttribute("data-asc") === "true";
+        
+        // Reset icons
+        table.querySelectorAll("th i.sort-icon").forEach(i => i.remove());
+        
+        // Add icon
+        const icon = document.createElement("i");
+        icon.className = "sort-icon fa-solid fa-sort-" + (asc ? "down" : "up"); // flipped logic for UX
+        icon.style.opacity = "0.7";
+        icon.style.marginLeft = "6px";
+        icon.style.fontSize = "0.75em";
+        th.appendChild(icon);
+        
+        th.setAttribute("data-asc", !asc);
+
+        const rows = Array.from(tbody.querySelectorAll("tr"));
+        rows.sort((a, b) => {
+            const aVal = a.children[index].textContent.trim();
+            const bVal = b.children[index].textContent.trim();
+            
+            // Time sort specific
+            if (aVal.match(/\d+:\d+:\d+/)) {
+                return asc ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+            }
+            
+            // Numeric sort
+            const aNum = parseFloat(aVal.replace(/[^0-9.-]+/g,""));
+            const bNum = parseFloat(bVal.replace(/[^0-9.-]+/g,""));
+            
+            if (!isNaN(aNum) && !isNaN(bNum) && !aVal.includes(".")) {
+                 return asc ? aNum - bNum : bNum - aNum;
+            }
+            return asc ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+        });
+        
+        // Minimize DOM reflow
+        const fragment = document.createDocumentFragment();
+        rows.forEach(row => fragment.appendChild(row));
+        tbody.appendChild(fragment);
+    });
 
     // ---------- Initial Load ----------
     loadPageData("dashboard");
