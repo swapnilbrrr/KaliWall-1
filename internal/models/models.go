@@ -97,6 +97,44 @@ type ResolvedPeer struct {
 	IP    string `json:"ip"`
 	Host  string `json:"host"`
 	Count int    `json:"count"`
+	Verified bool `json:"verified"`
+}
+
+// FirewallEvent is a normalized event for v1.2 real-time firewall event stream.
+type FirewallEvent struct {
+	Timestamp   time.Time `json:"timestamp"`
+	EventType   string    `json:"event_type"` // blocked_packet, rule_match, policy_apply, dns_lookup
+	Backend     string    `json:"backend"`
+	Action      string    `json:"action"`
+	SrcIP       string    `json:"src_ip"`
+	DstIP       string    `json:"dst_ip"`
+	Protocol    string    `json:"protocol"`
+	SrcPort     string    `json:"src_port"`
+	DstPort     string    `json:"dst_port"`
+	Chain       string    `json:"chain"`
+	RuleID      string    `json:"rule_id"`
+	RuleComment string    `json:"rule_comment"`
+	Detail      string    `json:"detail"`
+	Severity    string    `json:"severity"` // info, warning, critical
+}
+
+// RuleWarning is produced by rule analyzer before save/apply.
+type RuleWarning struct {
+	Index   int    `json:"index"`
+	RuleID  string `json:"rule_id"`
+	Level   string `json:"level"`   // warning, error
+	Code    string `json:"code"`    // duplicate_rule, shadowed_rule, unreachable_rule
+	Message string `json:"message"`
+}
+
+// DNSStats exposes DNS cache and lookup effectiveness metrics.
+type DNSStats struct {
+	LookupsTotal int `json:"lookups_total"`
+	CacheHits    int `json:"cache_hits"`
+	CacheMisses  int `json:"cache_misses"`
+	VerifiedPTR  int `json:"verified_ptr"`
+	Unresolved   int `json:"unresolved"`
+	CacheEntries int `json:"cache_entries"`
 }
 
 // TrafficVisibility provides low-overhead packet/flow visibility for the UI.

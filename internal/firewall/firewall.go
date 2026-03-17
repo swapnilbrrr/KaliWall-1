@@ -45,11 +45,17 @@ type Engine struct {
 	dnsMu      sync.RWMutex
 	dnsCache   map[string]dnsCacheEntry
 	nslookup   string
+	lookupsTotal int
+	cacheHits int
+	cacheMisses int
+	verifiedPTR int
+	unresolved int
 }
 
 type dnsCacheEntry struct {
-	host    string
-	expires time.Time
+	host     string
+	verified bool
+	expires  time.Time
 }
 
 // New creates a new firewall engine and detects whether live iptables mode is available.
@@ -58,6 +64,11 @@ func New(l *logger.TrafficLogger, db *database.Store) *Engine {
 	if path, err := exec.LookPath("nslookup"); err == nil {
 		e.nslookup = path
 	}
+	l.SetBackendProvider(func() string {
+		e.mu.RLock()
+		defer e.mu.RUnlock()
+		return e.backend
+	})
 	e.detectMode()
 
 	// Load persisted rules from database
@@ -202,6 +213,7 @@ func (e *Engine) AddRule(req models.RuleRequest) (models.Rule, error) {
 	e.logger.Log("CONFIG", "-", "-", "-",
 		fmt.Sprintf("Rule added: %s %s %s src=%s dst=%s dport=%s [%s]",
 			rule.Action, rule.Chain, rule.Protocol, rule.SrcIP, rule.DstIP, rule.DstPort, rule.Comment))
+	e.emitPolicyEvent("policy_apply", rule, "Rule added", "info")
 
 	return rule, nil
 }
@@ -220,7 +232,8 @@ func (e *Engine) RemoveRule(id string) error {
 		e.mu.Unlock()
 		return fmt.Errorf("rule %s not found", id)
 	}
-	needsSync := e.liveMode && e.rules[idx].Enabled
+	removed := e.rules[idx]
+	needsSync := e.liveMode && removed.Enabled
 
 	e.rules = append(e.rules[:idx], e.rules[idx+1:]...)
 	e.logger.Log("CONFIG", "-", "-", "-", fmt.Sprintf("Rule removed: %s", id))
@@ -238,6 +251,7 @@ func (e *Engine) RemoveRule(id string) error {
 			e.logger.Log("ERROR", "-", "-", "-", fmt.Sprintf("%s sync failed: %v", e.backend, err))
 		}
 	}
+	e.emitPolicyEvent("policy_apply", removed, "Rule removed", "warning")
 
 	return nil
 }
@@ -263,6 +277,7 @@ func (e *Engine) ToggleRule(id string) (models.Rule, error) {
 					e.logger.Log("ERROR", "-", "-", "-", fmt.Sprintf("%s sync failed: %v", e.backend, err))
 				}
 			}
+			e.emitPolicyEvent("rule_match", result, "Rule toggled", "info")
 			return result, nil
 		}
 	}
@@ -330,11 +345,126 @@ func (e *Engine) UpdateRule(id string, req models.RuleRequest) (models.Rule, err
 					e.logger.Log("ERROR", "-", "-", "-", fmt.Sprintf("%s sync failed: %v", e.backend, err))
 				}
 			}
+			e.emitPolicyEvent("policy_apply", result, "Rule updated", "info")
 			return result, nil
 		}
 	}
 	e.mu.Unlock()
 	return models.Rule{}, fmt.Errorf("rule %s not found", id)
+}
+
+// AnalyzeRules detects duplicate, shadowed, and unreachable rules.
+func (e *Engine) AnalyzeRules(rules []models.Rule) []models.RuleWarning {
+	warnings := make([]models.RuleWarning, 0)
+	seen := make(map[string]int)
+
+	for i, r := range rules {
+		sig := ruleSignature(r)
+		if prev, ok := seen[sig]; ok {
+			warnings = append(warnings, models.RuleWarning{
+				Index: i, RuleID: r.ID, Level: "warning", Code: "duplicate_rule",
+				Message: fmt.Sprintf("Duplicate of earlier rule at index %d", prev),
+			})
+		} else {
+			seen[sig] = i
+		}
+
+		for j := 0; j < i; j++ {
+			prev := rules[j]
+			if !prev.Enabled || !r.Enabled {
+				continue
+			}
+			if strings.EqualFold(prev.Chain, r.Chain) && strings.EqualFold(prev.Action, "ACCEPT") && strings.EqualFold(r.Action, "DROP") && ruleCovers(prev, r) {
+				warnings = append(warnings, models.RuleWarning{
+					Index: i, RuleID: r.ID, Level: "warning", Code: "shadowed_rule",
+					Message: fmt.Sprintf("Broad ACCEPT at index %d can shadow this DROP", j),
+				})
+				warnings = append(warnings, models.RuleWarning{
+					Index: i, RuleID: r.ID, Level: "error", Code: "unreachable_rule",
+					Message: fmt.Sprintf("Rule may never match due to earlier ACCEPT at index %d", j),
+				})
+				break
+			}
+		}
+	}
+	return warnings
+}
+
+// AnalyzeCurrentRules analyzes currently configured rules.
+func (e *Engine) AnalyzeCurrentRules() []models.RuleWarning {
+	return e.AnalyzeRules(e.ListRules())
+}
+
+// ValidateCandidateRule analyzes current rules with a pending candidate appended.
+func (e *Engine) ValidateCandidateRule(req models.RuleRequest) []models.RuleWarning {
+	base := e.ListRules()
+	candidate := models.Rule{
+		ID:       "candidate",
+		Chain:    strings.ToUpper(req.Chain),
+		Protocol: strings.ToLower(req.Protocol),
+		SrcIP:    normalise(req.SrcIP),
+		DstIP:    normalise(req.DstIP),
+		SrcPort:  normalise(req.SrcPort),
+		DstPort:  normalise(req.DstPort),
+		Action:   strings.ToUpper(req.Action),
+		Comment:  req.Comment,
+		Enabled:  req.Enabled,
+	}
+	base = append(base, candidate)
+	return e.AnalyzeRules(base)
+}
+
+func ruleSignature(r models.Rule) string {
+	return strings.Join([]string{
+		strings.ToUpper(r.Chain),
+		strings.ToLower(r.Protocol),
+		normalise(r.SrcIP),
+		normalise(r.DstIP),
+		normalise(r.SrcPort),
+		normalise(r.DstPort),
+		strings.ToUpper(r.Action),
+		fmt.Sprintf("%t", r.Enabled),
+	}, "|")
+}
+
+func ruleCovers(broad, specific models.Rule) bool {
+	if !sameOrAny(broad.Protocol, specific.Protocol) {
+		return false
+	}
+	if !sameOrAny(broad.SrcIP, specific.SrcIP) || !sameOrAny(broad.DstIP, specific.DstIP) {
+		return false
+	}
+	if !sameOrAny(broad.SrcPort, specific.SrcPort) || !sameOrAny(broad.DstPort, specific.DstPort) {
+		return false
+	}
+	return true
+}
+
+func sameOrAny(broad, specific string) bool {
+	b := strings.TrimSpace(strings.ToLower(normalise(broad)))
+	s := strings.TrimSpace(strings.ToLower(normalise(specific)))
+	return b == "any" || b == "all" || b == s
+}
+
+func (e *Engine) emitPolicyEvent(eventType string, rule models.Rule, detail, severity string) {
+	e.mu.RLock()
+	backend := e.backend
+	e.mu.RUnlock()
+	e.logger.EmitFirewallEvent(models.FirewallEvent{
+		EventType:   eventType,
+		Backend:     backend,
+		Action:      rule.Action,
+		SrcIP:       rule.SrcIP,
+		DstIP:       rule.DstIP,
+		Protocol:    rule.Protocol,
+		SrcPort:     rule.SrcPort,
+		DstPort:     rule.DstPort,
+		Chain:       rule.Chain,
+		RuleID:      rule.ID,
+		RuleComment: rule.Comment,
+		Detail:      detail,
+		Severity:    severity,
+	})
 }
 
 // ---------- IP Blocking ----------
@@ -357,6 +487,14 @@ func (e *Engine) BlockIP(ip, reason string) (models.BlockedIP, error) {
 	}
 
 	e.logger.Log("BLOCK", ip, "-", "-", fmt.Sprintf("IP blocked: %s (%s)", ip, reason))
+	e.logger.EmitFirewallEvent(models.FirewallEvent{
+		EventType: "blocked_packet",
+		Backend:   e.backend,
+		Action:    "BLOCK",
+		SrcIP:     ip,
+		Detail:    fmt.Sprintf("IP blocked: %s (%s)", ip, reason),
+		Severity:  "critical",
+	})
 	return entry, nil
 }
 
@@ -373,6 +511,14 @@ func (e *Engine) UnblockIP(ip string) error {
 	}
 
 	e.logger.Log("UNBLOCK", ip, "-", "-", fmt.Sprintf("IP unblocked: %s", ip))
+	e.logger.EmitFirewallEvent(models.FirewallEvent{
+		EventType: "policy_apply",
+		Backend:   e.backend,
+		Action:    "UNBLOCK",
+		SrcIP:     ip,
+		Detail:    fmt.Sprintf("IP unblocked: %s", ip),
+		Severity:  "info",
+	})
 	return nil
 }
 
@@ -411,6 +557,13 @@ func (e *Engine) BlockWebsite(domain, reason string) (models.WebsiteBlock, error
 	}
 
 	e.logger.Log("BLOCK", "-", "-", "-", fmt.Sprintf("Website blocked: %s (%s)", domain, reason))
+	e.logger.EmitFirewallEvent(models.FirewallEvent{
+		EventType: "policy_apply",
+		Backend:   e.backend,
+		Action:    "BLOCK",
+		Detail:    fmt.Sprintf("Website blocked: %s (%s)", domain, reason),
+		Severity:  "warning",
+	})
 	return entry, nil
 }
 
@@ -428,6 +581,13 @@ func (e *Engine) UnblockWebsite(domain string) error {
 	}
 
 	e.logger.Log("UNBLOCK", "-", "-", "-", fmt.Sprintf("Website unblocked: %s", domain))
+	e.logger.EmitFirewallEvent(models.FirewallEvent{
+		EventType: "policy_apply",
+		Backend:   e.backend,
+		Action:    "UNBLOCK",
+		Detail:    fmt.Sprintf("Website unblocked: %s", domain),
+		Severity:  "info",
+	})
 	return nil
 }
 
@@ -518,10 +678,12 @@ func (e *Engine) TrafficVisibility(limit int) models.TrafficVisibility {
 		if i >= 8 {
 			break
 		}
+		host, verified := e.resolveHostDetailed(item.Name)
 		resolved = append(resolved, models.ResolvedPeer{
 			IP:    item.Name,
-			Host:  e.resolveHost(item.Name),
+			Host:  host,
 			Count: item.Count,
+			Verified: verified,
 		})
 	}
 
@@ -551,16 +713,30 @@ func (e *Engine) resolveHost(ip string) string {
 	}
 
 	now := time.Now()
+	e.dnsMu.Lock()
+	e.lookupsTotal++
+	e.dnsMu.Unlock()
+
 	e.dnsMu.RLock()
 	if ent, ok := e.dnsCache[ip]; ok && ent.expires.After(now) {
 		e.dnsMu.RUnlock()
+		e.dnsMu.Lock()
+		e.cacheHits++
+		e.dnsMu.Unlock()
+		if ent.verified {
+			e.logger.EmitFirewallEvent(models.FirewallEvent{EventType: "dns_lookup", Backend: e.backend, Action: "CACHE_HIT", SrcIP: ip, Detail: "Forward-confirmed PTR cache hit", Severity: "info"})
+		}
 		return ent.host
 	}
 	e.dnsMu.RUnlock()
+	e.dnsMu.Lock()
+	e.cacheMisses++
+	e.dnsMu.Unlock()
 
 	host := "unresolved"
+	verified := false
 	if e.nslookup != "" {
-		ctx, cancel := context.WithTimeout(context.Background(), 1200*time.Millisecond)
+		ctx, cancel := context.WithTimeout(context.Background(), 900*time.Millisecond)
 		defer cancel()
 		out, err := exec.CommandContext(ctx, e.nslookup, ip).CombinedOutput()
 		if err == nil {
@@ -589,10 +765,85 @@ func (e *Engine) resolveHost(ip string) string {
 		}
 	}
 
+	if host != "unresolved" && host != "local/private" && host != "-" {
+		if ips, err := net.LookupHost(host); err == nil {
+			for _, resolvedIP := range ips {
+				if resolvedIP == ip {
+					verified = true
+					break
+				}
+			}
+		}
+	}
+
+	if verified {
+		e.dnsMu.Lock()
+		e.verifiedPTR++
+		e.dnsMu.Unlock()
+	} else if host == "unresolved" {
+		e.dnsMu.Lock()
+		e.unresolved++
+		e.dnsMu.Unlock()
+	}
+
 	e.dnsMu.Lock()
-	e.dnsCache[ip] = dnsCacheEntry{host: host, expires: now.Add(10 * time.Minute)}
+	e.dnsCache[ip] = dnsCacheEntry{host: host, verified: verified, expires: now.Add(10 * time.Minute)}
 	e.dnsMu.Unlock()
+	e.logger.EmitFirewallEvent(models.FirewallEvent{
+		EventType: "dns_lookup",
+		Backend:   e.backend,
+		Action:    "RESOLVE",
+		SrcIP:     ip,
+		Detail:    fmt.Sprintf("host=%s verified=%t", host, verified),
+		Severity:  "info",
+	})
 	return host
+}
+
+func (e *Engine) resolveHostDetailed(ip string) (string, bool) {
+	h := e.resolveHost(ip)
+	e.dnsMu.RLock()
+	defer e.dnsMu.RUnlock()
+	if ent, ok := e.dnsCache[ip]; ok {
+		return h, ent.verified
+	}
+	return h, false
+}
+
+// DNSStats returns DNS cache and lookup effectiveness metrics.
+func (e *Engine) DNSStats() models.DNSStats {
+	e.dnsMu.RLock()
+	defer e.dnsMu.RUnlock()
+	return models.DNSStats{
+		LookupsTotal: e.lookupsTotal,
+		CacheHits:    e.cacheHits,
+		CacheMisses:  e.cacheMisses,
+		VerifiedPTR:  e.verifiedPTR,
+		Unresolved:   e.unresolved,
+		CacheEntries: len(e.dnsCache),
+	}
+}
+
+// ClearDNSCache clears cached DNS results and related counters.
+func (e *Engine) ClearDNSCache() {
+	e.dnsMu.Lock()
+	e.dnsCache = make(map[string]dnsCacheEntry)
+	e.dnsMu.Unlock()
+	e.logger.EmitFirewallEvent(models.FirewallEvent{EventType: "dns_lookup", Backend: e.backend, Action: "CLEAR_CACHE", Detail: "DNS cache cleared", Severity: "warning"})
+}
+
+// RefreshDNS resolves a list of IPs and refreshes cache entries.
+func (e *Engine) RefreshDNS(ips []string) []models.ResolvedPeer {
+	out := make([]models.ResolvedPeer, 0, len(ips))
+	for _, ip := range ips {
+		ip = strings.TrimSpace(ip)
+		if ip == "" {
+			continue
+		}
+		host, verified := e.resolveHostDetailed(ip)
+		out = append(out, models.ResolvedPeer{IP: ip, Host: host, Verified: verified, Count: 0})
+	}
+	return out
 }
 
 // ---------- Statistics ----------
@@ -978,6 +1229,11 @@ func validateRuleRequest(req models.RuleRequest) error {
 		return fmt.Errorf("invalid destination port: %s", req.DstPort)
 	}
 	return nil
+}
+
+// ValidateRuleRequest exposes rule payload validation for API pre-checks.
+func ValidateRuleRequest(req models.RuleRequest) error {
+	return validateRuleRequest(req)
 }
 
 func isValidCIDROrIP(s string) bool {

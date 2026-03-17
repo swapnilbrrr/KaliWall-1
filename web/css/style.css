@@ -366,6 +366,12 @@ body {
     margin-bottom: 32px;
 }
 
+.compact-stats {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
 .stat-card {
     background: var(--bg-card);
     border-radius: var(--radius-lg);
@@ -378,6 +384,19 @@ body {
     transition: all var(--transition);
     position: relative;
     overflow: hidden;
+}
+
+.stat-card.compact {
+    padding: 14px;
+    min-height: 86px;
+}
+
+.stat-card.compact .stat-value {
+    font-size: 1.3rem;
+}
+
+.stat-card.compact .stat-label {
+    font-size: 0.78rem;
 }
 
 .stat-card:hover {
@@ -962,6 +981,49 @@ body {
 
 .threat-cell .badge {
     cursor: default;
+}
+
+.warning-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.warning-item {
+    padding: 10px 12px;
+    border: 1px solid var(--border-color);
+    border-left: 3px solid var(--color-warning);
+    border-radius: var(--radius);
+    background: var(--bg-body);
+    color: var(--text-secondary);
+}
+
+.host-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    white-space: nowrap;
+    max-width: 260px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.host-pill-verified {
+    color: var(--color-success);
+    background: var(--color-success-light);
+}
+
+.host-pill-unverified {
+    color: var(--text-secondary);
+    background: rgba(0,0,0,0.06);
+}
+
+[data-theme="dark"] .host-pill-unverified {
+    background: rgba(255,255,255,0.08);
 }
 
 #visPeersTable td:nth-child(2) {

@@ -24,12 +24,16 @@ func NewRouter(fw *firewall.Engine, tl *logger.TrafficLogger, ti *threatintel.Se
 
 	// REST API v1 endpoints
 	mux.HandleFunc("/api/v1/rules", h.handleRules)
+	mux.HandleFunc("/api/v1/rules/analyze", h.handleRulesAnalyze)
+	mux.HandleFunc("/api/v1/rules/validate", h.handleRuleValidate)
 	mux.HandleFunc("/api/v1/rules/", h.handleRuleByID)  // /api/v1/rules/{id}
 	mux.HandleFunc("/api/v1/stats", h.handleStats)
 	mux.HandleFunc("/api/v1/sysinfo", h.handleSysInfo)
 	mux.HandleFunc("/api/v1/connections", h.handleConnections)
 	mux.HandleFunc("/api/v1/logs", h.handleLogs)
 	mux.HandleFunc("/api/v1/logs/stream", h.handleLogStream)
+	mux.HandleFunc("/api/v1/events", h.handleEvents)
+	mux.HandleFunc("/api/v1/events/stream", h.handleEventStream)
 	mux.HandleFunc("/api/v1/threat/apikey", h.handleAPIKey)
 	mux.HandleFunc("/api/v1/threat/check/", h.handleThreatCheck)
 	mux.HandleFunc("/api/v1/threat/cache", h.handleThreatCache)
@@ -42,6 +46,9 @@ func NewRouter(fw *firewall.Engine, tl *logger.TrafficLogger, ti *threatintel.Se
 	mux.HandleFunc("/api/v1/firewall/engine", h.handleFirewallEngine)
 	mux.HandleFunc("/api/v1/firewall/logs", h.handleFirewallLogs)
 	mux.HandleFunc("/api/v1/traffic/visibility", h.handleTrafficVisibility)
+	mux.HandleFunc("/api/v1/dns/stats", h.handleDNSStats)
+	mux.HandleFunc("/api/v1/dns/cache", h.handleDNSCache)
+	mux.HandleFunc("/api/v1/dns/refresh", h.handleDNSRefresh)
 
 	// Serve web UI from the "web" directory
 	fs := http.FileServer(http.Dir("web"))
@@ -100,6 +107,107 @@ func (h *handlers) handleTrafficVisibility(w http.ResponseWriter, r *http.Reques
 		}
 	}
 	respond(w, http.StatusOK, models.APIResponse{Success: true, Data: h.fw.TrafficVisibility(limit)})
+}
+
+func (h *handlers) handleDNSStats(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	respond(w, http.StatusOK, models.APIResponse{Success: true, Data: h.fw.DNSStats()})
+}
+
+func (h *handlers) handleDNSCache(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		methodNotAllowed(w)
+		return
+	}
+	h.fw.ClearDNSCache()
+	respond(w, http.StatusOK, models.APIResponse{Success: true, Message: "DNS cache cleared"})
+}
+
+func (h *handlers) handleDNSRefresh(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	var body struct {
+		IPs []string `json:"ips"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		respond(w, http.StatusBadRequest, models.APIResponse{Success: false, Message: "invalid JSON"})
+		return
+	}
+	respond(w, http.StatusOK, models.APIResponse{Success: true, Data: h.fw.RefreshDNS(body.IPs)})
+}
+
+func (h *handlers) handleEvents(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	limit := 200
+	if q := r.URL.Query().Get("limit"); q != "" {
+		if v, err := strconv.Atoi(q); err == nil && v > 0 && v <= 2000 {
+			limit = v
+		}
+	}
+	respond(w, http.StatusOK, models.APIResponse{Success: true, Data: h.logger.RecentFirewallEvents(limit)})
+}
+
+func (h *handlers) handleEventStream(w http.ResponseWriter, r *http.Request) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Streaming not supported", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+
+	subID, ch := h.logger.SubscribeFirewallEvents()
+	defer h.logger.UnsubscribeFirewallEvents(subID)
+
+	ctx := r.Context()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case ev, ok := <-ch:
+			if !ok {
+				return
+			}
+			data, _ := json.Marshal(ev)
+			fmt.Fprintf(w, "event: firewall-event\ndata: %s\n\n", data)
+			flusher.Flush()
+		}
+	}
+}
+
+func (h *handlers) handleRulesAnalyze(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	respond(w, http.StatusOK, models.APIResponse{Success: true, Data: h.fw.AnalyzeCurrentRules()})
+}
+
+func (h *handlers) handleRuleValidate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	var req models.RuleRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respond(w, http.StatusBadRequest, models.APIResponse{Success: false, Message: "Invalid JSON"})
+		return
+	}
+	if err := firewall.ValidateRuleRequest(req); err != nil {
+		respond(w, http.StatusBadRequest, models.APIResponse{Success: false, Message: err.Error()})
+		return
+	}
+	warnings := h.fw.ValidateCandidateRule(req)
+	respond(w, http.StatusOK, models.APIResponse{Success: true, Data: warnings})
 }
 
 // handlers holds dependencies for HTTP handler methods.

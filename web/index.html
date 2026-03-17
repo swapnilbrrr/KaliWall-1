@@ -262,6 +262,25 @@
                 </div>
                 <div class="card">
                     <div class="card-header">
+                        <i class="fa-solid fa-shield-halved"></i>
+                        <h3>Firewall Events</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="stats-grid compact-stats" style="margin-bottom:12px">
+                            <div class="stat-card compact"><div class="stat-info"><span class="stat-value" id="eventTotalCount">0</span><span class="stat-label">Total</span></div></div>
+                            <div class="stat-card compact"><div class="stat-info"><span class="stat-value" id="eventWarningCount">0</span><span class="stat-label">Warnings</span></div></div>
+                            <div class="stat-card compact"><div class="stat-info"><span class="stat-value" id="eventCriticalCount">0</span><span class="stat-label">Critical</span></div></div>
+                        </div>
+                        <table class="table" id="eventsTable">
+                            <thead>
+                                <tr><th>Time</th><th>Type</th><th>Action</th><th>Source</th><th>Destination</th><th>Severity</th></tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
                         <i class="fa-solid fa-network-wired"></i>
                         <h3>Active Connections</h3>
                     </div>
@@ -274,6 +293,24 @@
                         </table>
                     </div>
                 </div>
+                <div class="card">
+                    <div class="card-header">
+                        <i class="fa-solid fa-globe"></i>
+                        <h3>DNS Verification</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="stats-grid compact-stats" style="margin-bottom:12px">
+                            <div class="stat-card compact"><div class="stat-info"><span class="stat-value" id="dnsLookupsTotal">0</span><span class="stat-label">Lookups</span></div></div>
+                            <div class="stat-card compact"><div class="stat-info"><span class="stat-value" id="dnsCacheHitRate">0%</span><span class="stat-label">Cache Hit Rate</span></div></div>
+                            <div class="stat-card compact"><div class="stat-info"><span class="stat-value" id="dnsVerifiedPTR">0</span><span class="stat-label">Verified PTR</span></div></div>
+                            <div class="stat-card compact"><div class="stat-info"><span class="stat-value" id="dnsUnresolved">0</span><span class="stat-label">Unresolved</span></div></div>
+                        </div>
+                        <div class="toolbar-actions">
+                            <button class="btn btn-secondary" id="btnRefreshDNSStats"><i class="fa-solid fa-arrows-rotate"></i> Refresh</button>
+                            <button class="btn btn-secondary" id="btnClearDNSCache"><i class="fa-solid fa-broom"></i> Clear DNS Cache</button>
+                        </div>
+                    </div>
+                </div>
             </div>
         </section>
 
@@ -284,6 +321,15 @@
                 <button class="btn btn-primary" id="btnAddRule">
                     <i class="fa-solid fa-plus"></i> Add Rule
                 </button>
+            </div>
+            <div class="card" id="ruleWarningsCard" style="display:none">
+                <div class="card-header">
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                    <h3>Rule Analyzer Warnings</h3>
+                </div>
+                <div class="card-body">
+                    <ul id="ruleWarningsList" class="warning-list"></ul>
+                </div>
             </div>
             <div class="card">
                 <div class="card-body table-responsive">
@@ -319,7 +365,7 @@
                 <div class="card-body table-responsive">
                     <table class="table" id="connectionsTable">
                         <thead>
-                            <tr><th>Protocol</th><th>Local IP</th><th>Local Port</th><th>Remote IP</th><th>Remote Port</th><th>State</th><th>Threat</th></tr>
+                            <tr><th>Protocol</th><th>Local IP</th><th>Local Port</th><th>Remote IP</th><th>Host</th><th>Remote Port</th><th>State</th><th>Threat</th></tr>
                         </thead>
                         <tbody></tbody>
                     </table>
@@ -583,6 +629,10 @@
                 <div class="form-group full-width">
                     <label for="ruleComment">Comment</label>
                     <input type="text" id="ruleComment" placeholder="Rule description">
+                </div>
+                <div class="form-group full-width" id="ruleFormWarnings" style="display:none">
+                    <label>Validation Warnings</label>
+                    <ul id="ruleFormWarningsList" class="warning-list"></ul>
                 </div>
             </div>
             <div class="modal-footer">

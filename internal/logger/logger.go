@@ -20,6 +20,10 @@ type TrafficLogger struct {
 	entries     []models.TrafficEntry // in-memory buffer for API queries
 	subscribers map[uint64]chan models.TrafficEntry
 	nextSubID   uint64
+	events      []models.FirewallEvent
+	eventSubscribers map[uint64]chan models.FirewallEvent
+	nextEventSubID uint64
+	backendProvider func() string
 }
 
 // New opens (or creates) the log file and returns a TrafficLogger.
@@ -32,6 +36,8 @@ func New(path string) (*TrafficLogger, error) {
 		file:        f,
 		entries:     make([]models.TrafficEntry, 0, 1024),
 		subscribers: make(map[uint64]chan models.TrafficEntry),
+		events:      make([]models.FirewallEvent, 0, 1024),
+		eventSubscribers: make(map[uint64]chan models.FirewallEvent),
 	}
 	tl.Log("SYSTEM", "-", "-", "-", "KaliWall daemon started")
 	return tl, nil
@@ -74,6 +80,89 @@ func (tl *TrafficLogger) Log(action, srcIP, dstIP, protocol, detail string) {
 		case ch <- entry:
 		default:
 		}
+	}
+
+	// Lightweight bridge for kernel blocked packet events into structured event stream.
+	if strings.EqualFold(action, "BLOCK") && strings.Contains(strings.ToLower(detail), "kernel:") {
+		backend := "memory"
+		if tl.backendProvider != nil {
+			backend = tl.backendProvider()
+		}
+		tl.emitFirewallEventLocked(models.FirewallEvent{
+			Timestamp: entry.Timestamp,
+			EventType: "blocked_packet",
+			Backend:   backend,
+			Action:    strings.ToUpper(action),
+			SrcIP:     srcIP,
+			DstIP:     dstIP,
+			Protocol:  protocol,
+			Detail:    detail,
+			Severity:  "critical",
+		})
+	}
+}
+
+// SetBackendProvider wires a callback that returns current firewall backend name.
+func (tl *TrafficLogger) SetBackendProvider(provider func() string) {
+	tl.mu.Lock()
+	defer tl.mu.Unlock()
+	tl.backendProvider = provider
+}
+
+func (tl *TrafficLogger) emitFirewallEventLocked(ev models.FirewallEvent) {
+	if ev.Timestamp.IsZero() {
+		ev.Timestamp = time.Now()
+	}
+	if len(tl.events) >= 5000 {
+		tl.events = tl.events[1:]
+	}
+	tl.events = append(tl.events, ev)
+	for _, ch := range tl.eventSubscribers {
+		select {
+		case ch <- ev:
+		default:
+		}
+	}
+}
+
+// EmitFirewallEvent publishes a normalized firewall event.
+func (tl *TrafficLogger) EmitFirewallEvent(ev models.FirewallEvent) {
+	tl.mu.Lock()
+	defer tl.mu.Unlock()
+	tl.emitFirewallEventLocked(ev)
+}
+
+// RecentFirewallEvents returns latest n normalized firewall events.
+func (tl *TrafficLogger) RecentFirewallEvents(n int) []models.FirewallEvent {
+	tl.mu.Lock()
+	defer tl.mu.Unlock()
+	if n <= 0 || n > len(tl.events) {
+		n = len(tl.events)
+	}
+	start := len(tl.events) - n
+	out := make([]models.FirewallEvent, n)
+	copy(out, tl.events[start:])
+	return out
+}
+
+// SubscribeFirewallEvents subscribes to real-time firewall events.
+func (tl *TrafficLogger) SubscribeFirewallEvents() (uint64, chan models.FirewallEvent) {
+	tl.mu.Lock()
+	defer tl.mu.Unlock()
+	tl.nextEventSubID++
+	id := tl.nextEventSubID
+	ch := make(chan models.FirewallEvent, 64)
+	tl.eventSubscribers[id] = ch
+	return id, ch
+}
+
+// UnsubscribeFirewallEvents unsubscribes and closes channel.
+func (tl *TrafficLogger) UnsubscribeFirewallEvents(id uint64) {
+	tl.mu.Lock()
+	defer tl.mu.Unlock()
+	if ch, ok := tl.eventSubscribers[id]; ok {
+		close(ch)
+		delete(tl.eventSubscribers, id)
 	}
 }
 

@@ -6,6 +6,9 @@
 
     const API = "/api/v1";
     var bandwidthChart = null; // Hoisted for theme access
+    var firewallEventSource = null;
+    var maxEventRows = 120;
+    var peerHostMap = {};
 
     // ---------- Theme Management ----------
     const themeToggle = document.getElementById("themeToggle");
@@ -120,6 +123,9 @@
                 loadTrafficVisibility();
                 loadDashboardLogs();
                 loadDashboardConnections();
+                loadFirewallEvents();
+                loadDNSStats();
+                startFirewallEventStream();
                 loadAnalytics();
                 startBandwidthStream();
                 break;
@@ -147,6 +153,7 @@
                 break;
         }
         if (page !== "dashboard") stopBandwidthStream();
+        if (page !== "dashboard") stopFirewallEventStream();
     }
 
     async function apiFetch(endpoint) {
@@ -220,18 +227,37 @@
         if (!peersTbody) return;
         peersTbody.innerHTML = "";
         const peers = v.resolved_peers || [];
+        peerHostMap = {};
         if (peers.length === 0) {
             peersTbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:#9ca3af">No active remote host data</td></tr>';
             return;
         }
         peers.forEach(function (peer) {
+            peerHostMap[peer.ip] = {
+                host: peer.host || "unresolved",
+                verified: !!peer.verified,
+            };
             const tr = document.createElement("tr");
             tr.innerHTML =
                 "<td><strong>" + escapeHtml(peer.ip) + "</strong></td>" +
-                "<td>" + escapeHtml(peer.host || "unresolved") + "</td>" +
+                "<td>" + renderHostBadge(peer.host || "unresolved", !!peer.verified) + "</td>" +
                 "<td>" + (peer.count || 0) + "</td>";
             peersTbody.appendChild(tr);
         });
+    }
+
+    async function refreshPeerHostMap() {
+        const res = await apiFetch("/traffic/visibility?limit=1200");
+        if (!res.success) return;
+        const peers = (res.data && res.data.resolved_peers) || [];
+        const next = {};
+        peers.forEach(function (peer) {
+            next[peer.ip] = {
+                host: peer.host || "unresolved",
+                verified: !!peer.verified,
+            };
+        });
+        peerHostMap = next;
     }
 
     // Set a circular SVG gauge by percentage (0-100).
@@ -343,6 +369,7 @@
     // ---------- Connections ----------
 
     async function loadConnections() {
+        await refreshPeerHostMap();
         const res = await apiFetch("/connections");
         if (!res.success) return;
         const tbody = document.querySelector("#connectionsTable tbody");
@@ -350,11 +377,13 @@
         res.data.forEach((c) => {
             const tr = document.createElement("tr");
             var remoteIP = c.remote_ip || "";
+            var host = peerHostMap[remoteIP] || { host: "unresolved", verified: false };
             tr.innerHTML =
                 "<td>" + escapeHtml(c.protocol) + "</td>" +
                 "<td>" + escapeHtml(c.local_ip) + "</td>" +
                 "<td>" + escapeHtml(c.local_port) + "</td>" +
                 "<td>" + escapeHtml(remoteIP) + "</td>" +
+                "<td>" + renderHostBadge(host.host, host.verified) + "</td>" +
                 "<td>" + escapeHtml(c.remote_port) + "</td>" +
                 "<td>" + stateBadge(c.state) + "</td>" +
                 '<td class="threat-cell" data-ip="' + escapeHtml(remoteIP) + '"><span class="badge badge-disabled">-</span></td>';
@@ -449,6 +478,95 @@
         startLogStream();
     }
 
+    // ---------- Firewall Events (SSE + Dashboard Cards) ----------
+
+    async function loadFirewallEvents() {
+        const res = await apiFetch("/events?limit=40");
+        if (!res.success) return;
+        const events = res.data || [];
+        const tbody = document.querySelector("#eventsTable tbody");
+        if (!tbody) return;
+        tbody.innerHTML = "";
+        events.forEach(function (ev) {
+            appendEventRow(ev, false);
+        });
+        recomputeEventStats();
+    }
+
+    function startFirewallEventStream() {
+        stopFirewallEventStream();
+        const tbody = document.querySelector("#eventsTable tbody");
+        if (!tbody) return;
+        firewallEventSource = new EventSource(API + "/events/stream");
+        firewallEventSource.addEventListener("firewall-event", function (e) {
+            try {
+                var ev = JSON.parse(e.data);
+                appendEventRow(ev, true);
+                recomputeEventStats();
+            } catch (_) {}
+        });
+    }
+
+    function stopFirewallEventStream() {
+        if (firewallEventSource) {
+            firewallEventSource.close();
+            firewallEventSource = null;
+        }
+    }
+
+    function appendEventRow(ev, prepend) {
+        const tbody = document.querySelector("#eventsTable tbody");
+        if (!tbody) return;
+        const tr = document.createElement("tr");
+        tr.innerHTML =
+            "<td>" + formatTime(ev.timestamp) + "</td>" +
+            "<td>" + eventTypeBadge(ev.event_type) + "</td>" +
+            "<td>" + actionBadge(ev.action) + "</td>" +
+            "<td>" + escapeHtml(ev.src_ip || "-") + "</td>" +
+            "<td>" + escapeHtml(ev.dst_ip || "-") + "</td>" +
+            "<td>" + severityBadge(ev.severity) + "</td>";
+        if (prepend) {
+            tbody.insertBefore(tr, tbody.firstChild);
+        } else {
+            tbody.appendChild(tr);
+        }
+        while (tbody.children.length > maxEventRows) {
+            tbody.removeChild(tbody.lastChild);
+        }
+    }
+
+    function recomputeEventStats() {
+        const rows = document.querySelectorAll("#eventsTable tbody tr");
+        var warn = 0;
+        var critical = 0;
+        rows.forEach(function (row) {
+            var sev = (row.querySelector(".badge-severity") || {}).getAttribute ? row.querySelector(".badge-severity").getAttribute("data-severity") : "";
+            if (sev === "warning") warn++;
+            if (sev === "critical") critical++;
+        });
+        var totalEl = document.getElementById("eventTotalCount");
+        var warnEl = document.getElementById("eventWarningCount");
+        var critEl = document.getElementById("eventCriticalCount");
+        if (totalEl) totalEl.textContent = String(rows.length);
+        if (warnEl) warnEl.textContent = String(warn);
+        if (critEl) critEl.textContent = String(critical);
+    }
+
+    async function loadDNSStats() {
+        const res = await apiFetch("/dns/stats");
+        if (!res.success) return;
+        const s = res.data || {};
+        const hits = s.cache_hits || 0;
+        const misses = s.cache_misses || 0;
+        const total = hits + misses;
+        const rate = total > 0 ? ((hits / total) * 100).toFixed(1) + "%" : "0%";
+
+        setText("dnsLookupsTotal", s.lookups_total || 0);
+        setText("dnsCacheHitRate", rate);
+        setText("dnsVerifiedPTR", s.verified_ptr || 0);
+        setText("dnsUnresolved", s.unresolved || 0);
+    }
+
     // ---------- Rule CRUD ----------
 
     const ruleModal = document.getElementById("ruleModal");
@@ -456,6 +574,7 @@
 
     document.getElementById("btnAddRule").addEventListener("click", () => {
         ruleForm.reset();
+        renderRuleWarnings([]);
         document.getElementById("ruleEditId").value = "";
         document.getElementById("ruleModalTitle").textContent = "Add Firewall Rule";
         document.getElementById("ruleSubmitBtn").innerHTML = '<i class="fa-solid fa-check"></i> Create Rule';
@@ -484,6 +603,22 @@
             comment: document.getElementById("ruleComment").value,
             enabled: document.getElementById("ruleEnabled").value === "true",
         };
+
+        const validationRes = await fetch(API + "/rules/validate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+        });
+        const validationData = await validationRes.json();
+        if (!validationRes.ok || !validationData.success) {
+            toast(validationData.message || "Rule validation failed", "error");
+            return;
+        }
+        const warnings = validationData.data || [];
+        renderRuleWarnings(warnings);
+        if (warnings.length > 0 && !confirm("Rule analyzer found warnings. Continue anyway?")) {
+            return;
+        }
 
         let res;
         if (editId) {
@@ -541,6 +676,7 @@
         const res = await apiFetch("/rules/" + encodeURIComponent(id));
         if (!res.success) { toast("Failed to load rule", "error"); return; }
         const rule = res.data;
+        renderRuleWarnings([]);
         document.getElementById("ruleEditId").value = rule.id;
         document.getElementById("ruleChain").value = rule.chain;
         document.getElementById("ruleProtocol").value = rule.protocol;
@@ -554,6 +690,33 @@
         document.getElementById("ruleModalTitle").textContent = "Edit Firewall Rule";
         document.getElementById("ruleSubmitBtn").innerHTML = '<i class="fa-solid fa-check"></i> Update Rule';
         ruleModal.classList.add("open");
+    }
+
+    function renderRuleWarnings(warnings) {
+        const card = document.getElementById("ruleWarningsCard");
+        const list = document.getElementById("ruleWarningsList");
+        const modalWrap = document.getElementById("ruleFormWarnings");
+        const modalList = document.getElementById("ruleFormWarningsList");
+        if (!card || !list || !modalWrap || !modalList) return;
+        list.innerHTML = "";
+        modalList.innerHTML = "";
+        if (!warnings || warnings.length === 0) {
+            card.style.display = "none";
+            modalWrap.style.display = "none";
+            return;
+        }
+        warnings.forEach(function (w) {
+            const li = document.createElement("li");
+            li.className = "warning-item";
+            li.innerHTML = '<span class="badge ' + (w.level === "error" ? "badge-drop" : "badge-reject") + '">' + escapeHtml(w.level || "warning") + '</span> ' +
+                '<strong>' + escapeHtml(w.code || "rule_warning") + '</strong> - ' + escapeHtml(w.message || "Rule warning");
+            list.appendChild(li);
+
+            const modalLi = li.cloneNode(true);
+            modalList.appendChild(modalLi);
+        });
+        card.style.display = "block";
+        modalWrap.style.display = "block";
     }
 
     // ---------- Blocked IPs ----------
@@ -701,6 +864,19 @@
 
     document.getElementById("btnRefreshConn").addEventListener("click", () => loadConnections());
     document.getElementById("btnRefreshLogs").addEventListener("click", () => loadLogs());
+    document.getElementById("btnRefreshDNSStats").addEventListener("click", () => loadDNSStats());
+
+    document.getElementById("btnClearDNSCache").addEventListener("click", async function () {
+        const res = await fetch(API + "/dns/cache", { method: "DELETE" });
+        const data = await res.json();
+        if (data.success) {
+            toast("DNS cache cleared", "success");
+            loadDNSStats();
+            loadTrafficVisibility();
+        } else {
+            toast(data.message || "Failed to clear DNS cache", "error");
+        }
+    });
 
     document.getElementById("btnToggleLive").addEventListener("click", function () {
         logLive = !logLive;
@@ -1224,6 +1400,29 @@
         const s = (state || "").toUpperCase();
         const cls = "badge-" + s.toLowerCase().replace(/ /g, "_");
         return '<span class="badge ' + cls + '">' + escapeHtml(s) + "</span>";
+    }
+
+    function eventTypeBadge(eventType) {
+        var text = (eventType || "event").replace(/_/g, " ");
+        return '<span class="badge badge-input">' + escapeHtml(text) + '</span>';
+    }
+
+    function severityBadge(severity) {
+        var sev = (severity || "info").toLowerCase();
+        var cls = sev === "critical" ? "badge-drop" : sev === "warning" ? "badge-reject" : "badge-enabled";
+        return '<span class="badge badge-severity ' + cls + '" data-severity="' + escapeHtml(sev) + '">' + escapeHtml(sev) + '</span>';
+    }
+
+    function renderHostBadge(host, verified) {
+        var label = host || "unresolved";
+        var cls = verified ? "host-pill host-pill-verified" : "host-pill host-pill-unverified";
+        var icon = verified ? "fa-circle-check" : "fa-circle-question";
+        return '<span class="' + cls + '"><i class="fa-solid ' + icon + '"></i> ' + escapeHtml(label) + '</span>';
+    }
+
+    function setText(id, value) {
+        var el = document.getElementById(id);
+        if (el) el.textContent = String(value);
     }
 
     function toast(message, type) {
