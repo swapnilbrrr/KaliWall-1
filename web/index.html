@@ -17,8 +17,8 @@
 <!-- Sidebar Navigation -->
 <aside class="sidebar" id="sidebar">
     <div class="sidebar-header">
-        <i class="fa-solid fa-shield-halved sidebar-logo"></i>
-        <span class="sidebar-title"><span class="brand-kali">KALI</span><span class="brand-wall">WALL</span></span>
+        <div class="sidebar-logo-mark">KW</div>
+        <span class="sidebar-title"><span class="brand-kali">KALI</span><span class="brand-wall">WALL</span><span class="brand-edition">Firewall</span></span>
     </div>
     <nav class="sidebar-nav">
         <a href="#" class="nav-item active" data-page="dashboard">
@@ -64,6 +64,12 @@
         </button>
         <h1 class="page-title" id="pageTitle">Dashboard</h1>
         <div class="topbar-actions">
+            <button class="btn btn-sm btn-secondary topbar-mini-btn" id="btnFirewallStop" title="Switch firewall to memory mode">
+                <i class="fa-solid fa-circle-stop"></i> Stop
+            </button>
+            <button class="btn btn-sm btn-primary topbar-mini-btn" id="btnFirewallRestart" title="Restart firewall live backend">
+                <i class="fa-solid fa-rotate-right"></i> Restart
+            </button>
             <button class="theme-toggle" id="themeToggle" title="Toggle Dark/Light Mode">
                 <i class="fa-solid fa-moon"></i>
             </button>
@@ -89,7 +95,6 @@
                     <button class="btn btn-secondary btn-sm" data-scroll-target="dashboard-visibility"><i class="fa-solid fa-radar"></i> Visibility</button>
                     <button class="btn btn-secondary btn-sm" data-scroll-target="dashboard-gauges"><i class="fa-solid fa-microchip"></i> Resources</button>
                     <button class="btn btn-secondary btn-sm" data-scroll-target="dashboard-charts"><i class="fa-solid fa-chart-line"></i> Charts</button>
-                    <button class="btn btn-secondary btn-sm" data-scroll-target="dashboard-geo"><i class="fa-solid fa-earth-americas"></i> GeoIP</button>
                     <button class="btn btn-secondary btn-sm" data-scroll-target="dashboard-events"><i class="fa-solid fa-shield-halved"></i> Events</button>
                 </div>
                 <div class="dashboard-nav-controls">

@@ -30,7 +30,7 @@
     --color-teal: #14b8a6;
     --color-orange: #f97316;
 
-    --bg-body: #f3f4f6;
+    --bg-body: #ffffff;
     --bg-white: #ffffff;
     --bg-card: #ffffff;
     --bg-sidebar: #0f172a;
@@ -132,12 +132,19 @@ body {
     border-bottom: 1px solid var(--border-sidebar);
 }
 
-.sidebar-logo {
-    font-size: 24px;
-    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    filter: drop-shadow(0 2px 4px rgba(37, 99, 235, 0.3));
+.sidebar-logo-mark {
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+    background: linear-gradient(135deg, #ef4444 0%, #1d4ed8 100%);
+    color: #fff;
+    font-size: 0.82rem;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 8px 16px rgba(37, 99, 235, 0.28);
 }
 
 .sidebar-title {
@@ -153,6 +160,15 @@ body {
 
 .sidebar-title .brand-wall {
     color: #ffffff;
+}
+
+.sidebar-title .brand-edition {
+    display: block;
+    font-size: 0.68rem;
+    margin-top: -3px;
+    color: #93c5fd;
+    letter-spacing: 0.6px;
+    font-weight: 600;
 }
 
 .sidebar-nav {
@@ -273,7 +289,14 @@ body {
 .topbar-actions {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 10px;
+}
+
+.topbar-mini-btn {
+    height: 30px;
+    padding: 0 10px;
+    font-size: 0.78rem;
+    border-radius: 7px;
 }
 
 .theme-toggle {
@@ -358,12 +381,7 @@ body {
 }
 
 .soc-dashboard {
-    background: #0b1220;
-    border: 1px solid #1f2a44;
-    border-radius: var(--radius-lg);
-    padding: 16px;
-    margin-bottom: 22px;
-    color: #cbd5e1;
+    display: none;
 }
 
 .soc-header {
@@ -1437,6 +1455,11 @@ body {
         gap: 8px;
         flex-wrap: wrap;
         justify-content: flex-end;
+    }
+
+    .topbar-mini-btn {
+        padding: 0 8px;
+        font-size: 0.72rem;
     }
 
     .page-toolbar {
