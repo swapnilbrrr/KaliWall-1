@@ -16,7 +16,7 @@
 <aside class="sidebar" id="sidebar">
     <div class="sidebar-header">
         <i class="fa-solid fa-shield-halved sidebar-logo"></i>
-        <span class="sidebar-title">KaliWall</span>
+        <span class="sidebar-title"><span class="brand-kali">KALI</span><span class="brand-wall">WALL</span></span>
     </div>
     <nav class="sidebar-nav">
         <a href="#" class="nav-item active" data-page="dashboard">
@@ -139,7 +139,7 @@
             <div class="dashboard-grid" style="margin-bottom:20px" data-dashboard-section="dashboard-visibility">
                 <div class="card">
                     <div class="card-header"><i class="fa-solid fa-radar"></i><h3>Traffic Visibility</h3></div>
-                    <div class="card-body">
+                    <div class="card-body table-responsive">
                         <div class="stats-grid" style="margin-bottom:12px">
                             <div class="stat-card" data-page-target="connections"><div class="stat-info"><span class="stat-value" id="visConnections">0</span><span class="stat-label">Active Connections</span></div></div>
                             <div class="stat-card" data-page-target="connections"><div class="stat-info"><span class="stat-value" id="visRemoteIPs">0</span><span class="stat-label">Unique Remote IPs</span></div></div>
@@ -154,7 +154,7 @@
                 </div>
                 <div class="card">
                     <div class="card-header"><i class="fa-solid fa-earth-asia"></i><h3>Connected Hosts (nslookup)</h3></div>
-                    <div class="card-body">
+                    <div class="card-body table-responsive">
                         <table class="table" id="visPeersTable">
                             <thead><tr><th>Remote IP</th><th>Host</th><th>Connections</th></tr></thead>
                             <tbody></tbody>

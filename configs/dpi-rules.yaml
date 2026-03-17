@@ -27,3 +27,471 @@
   type: http_url
   pattern: /admin
   action: LOG
+
+- id: payload-cmd-injection
+  type: payload
+  pattern: ;wget 
+  action: BLOCK
+
+- id: payload-shell-dropper
+  type: payload
+  pattern: curl http
+  action: BLOCK
+
+- id: payload-powershell-encoded
+  type: payload
+  pattern: powershell -enc
+  action: BLOCK
+
+- id: payload-base64-exec
+  type: payload
+  pattern: base64 -d |
+  action: BLOCK
+
+- id: payload-auth-basic-log
+  type: payload
+  pattern: authorization: basic
+  action: LOG
+
+- id: payload-auth-bearer-log
+  type: payload
+  pattern: authorization: bearer
+  action: LOG
+
+- id: payload-aws-key-leak
+  type: payload
+  pattern: AKIA
+  action: BLOCK
+
+- id: payload-private-key-leak
+  type: payload
+  pattern: -----BEGIN PRIVATE KEY-----
+  action: BLOCK
+
+- id: payload-ssrf-metadata
+  type: payload
+  pattern: 169.254.169.254
+  action: BLOCK
+
+- id: domain-dynamic-dns-log
+  type: domain
+  pattern: duckdns.org
+  action: LOG
+
+- id: domain-dynamic-dns-noip-log
+  type: domain
+  pattern: no-ip.
+  action: LOG
+
+- id: domain-file-share-log
+  type: domain
+  pattern: transfer.sh
+  action: LOG
+
+- id: sni-punycode-observe
+  type: sni
+  pattern: xn--
+  action: LOG
+
+- id: sni-cobaltstrike-indicator
+  type: sni
+  pattern: teamserver
+  action: BLOCK
+
+- id: http-url-dotenv-leak
+  type: http_url
+  pattern: /.env
+  action: BLOCK
+
+- id: http-url-git-leak
+  type: http_url
+  pattern: /.git/
+  action: BLOCK
+
+- id: http-url-k8s-secrets
+  type: http_url
+  pattern: /var/run/secrets/kubernetes.io
+  action: BLOCK
+
+- id: http-url-cloud-metadata
+  type: http_url
+  pattern: /latest/meta-data/
+  action: BLOCK
+
+- id: http-url-login-observe
+  type: http_url
+  pattern: /login
+  action: LOG
+
+- id: http-url-wordpress-admin
+  type: http_url
+  pattern: /wp-admin
+  action: LOG
+
+- id: http-url-executable-download
+  type: http_url
+  pattern: (?i)\.(exe|dll|scr|bat|ps1|vbs|js)(\?|$)
+  regex: true
+  action: BLOCK
+
+- id: payload-port-scan-indicator
+  type: payload
+  pattern: nmap scan report for
+  action: LOG
+
+- id: RULE-151
+  type: domain
+  pattern: (?i)^[a-z0-9]{40,}\.
+  regex: true
+  action: LOG
+
+- id: RULE-152
+  type: domain
+  pattern: (?i)^[a-z2-7]{30,}\.
+  regex: true
+  action: LOG
+
+- id: RULE-153
+  type: domain
+  pattern: (?i)^.{180,}$
+  regex: true
+  action: LOG
+
+- id: RULE-154
+  type: payload
+  pattern: dnscat
+  action: BLOCK
+
+- id: RULE-155
+  type: payload
+  pattern: iodine
+  action: BLOCK
+
+- id: RULE-156
+  type: payload
+  pattern: dns2tcp
+  action: BLOCK
+
+- id: RULE-157
+  type: domain
+  pattern: (?i)^[bcdfghjklmnpqrstvwxyz]{12,}\.
+  regex: true
+  action: LOG
+
+- id: RULE-158
+  type: domain
+  pattern: (?i)^[0-9a-f]{32,}\.
+  regex: true
+  action: LOG
+
+- id: RULE-159
+  type: payload
+  pattern: TXT "
+  action: LOG
+
+- id: RULE-160
+  type: domain
+  pattern: .bit
+  action: LOG
+
+- id: RULE-161
+  type: domain
+  pattern: dynu.
+  action: LOG
+
+- id: RULE-162
+  type: domain
+  pattern: ddns.
+  action: LOG
+
+- id: RULE-163
+  type: domain
+  pattern: (*).ru
+  action: LOG
+
+- id: RULE-164
+  type: domain
+  pattern: .su
+  action: LOG
+
+- id: RULE-165
+  type: domain
+  pattern: .top
+  action: LOG
+
+- id: RULE-166
+  type: domain
+  pattern: .click
+  action: LOG
+
+- id: RULE-167
+  type: payload
+  pattern: _xmpp._tcp
+  action: LOG
+
+- id: RULE-168
+  type: payload
+  pattern: _sip._udp
+  action: LOG
+
+- id: RULE-169
+  type: payload
+  pattern: NXDOMAIN
+  action: LOG
+
+- id: RULE-170
+  type: payload
+  pattern: query_rate>200/min
+  action: LOG
+
+- id: RULE-171
+  type: payload
+  pattern: union all select
+  action: BLOCK
+
+- id: RULE-172
+  type: payload
+  pattern: ' or '1'='1
+  action: BLOCK
+
+- id: RULE-173
+  type: payload
+  pattern: sleep(
+  action: BLOCK
+
+- id: RULE-174
+  type: payload
+  pattern: benchmark(
+  action: BLOCK
+
+- id: RULE-175
+  type: payload
+  pattern: onerror=
+  action: LOG
+
+- id: RULE-176
+  type: payload
+  pattern: javascript:
+  action: LOG
+
+- id: RULE-177
+  type: payload
+  pattern: () { :; }
+  action: BLOCK
+
+- id: RULE-178
+  type: payload
+  pattern: ${jndi:
+  action: BLOCK
+
+- id: RULE-179
+  type: payload
+  pattern: ../../
+  action: BLOCK
+
+- id: RULE-180
+  type: payload
+  pattern: %2e%2e%2f
+  action: BLOCK
+
+- id: RULE-181
+  type: payload
+  pattern: php://filter
+  action: BLOCK
+
+- id: RULE-182
+  type: payload
+  pattern: expect://
+  action: BLOCK
+
+- id: RULE-183
+  type: payload
+  pattern: system(
+  action: BLOCK
+
+- id: RULE-184
+  type: payload
+  pattern: passthru(
+  action: BLOCK
+
+- id: RULE-185
+  type: payload
+  pattern: filename=.*.php
+  action: BLOCK
+
+- id: RULE-186
+  type: payload
+  pattern: filename=.*.jsp
+  action: BLOCK
+
+- id: RULE-187
+  type: payload
+  pattern: sqlmap
+  action: LOG
+
+- id: RULE-188
+  type: payload
+  pattern: nikto
+  action: LOG
+
+- id: RULE-189
+  type: payload
+  pattern: nmap scripting engine
+  action: LOG
+
+- id: RULE-190
+  type: payload
+  pattern: <!DOCTYPE
+  action: BLOCK
+
+- id: RULE-191
+  type: payload
+  pattern: <!ENTITY
+  action: BLOCK
+
+- id: RULE-192
+  type: payload
+  pattern: {{7*7}}
+  action: LOG
+
+- id: RULE-193
+  type: payload
+  pattern: ysoserial
+  action: BLOCK
+
+- id: RULE-194
+  type: payload
+  pattern: rO0AB
+  action: BLOCK
+
+- id: RULE-195
+  type: payload
+  pattern: certutil -urlcache
+  action: BLOCK
+
+- id: RULE-196
+  type: payload
+  pattern: bitsadmin
+  action: BLOCK
+
+- id: RULE-197
+  type: payload
+  pattern: mshta http
+  action: BLOCK
+
+- id: RULE-198
+  type: payload
+  pattern: bash -i >& /dev/tcp/
+  action: BLOCK
+
+- id: RULE-199
+  type: payload
+  pattern: nc -e /bin/sh
+  action: BLOCK
+
+- id: RULE-200
+  type: payload
+  pattern: mkfifo /tmp/
+  action: BLOCK
+
+- id: RULE-201
+  type: payload
+  pattern: meterpreter
+  action: BLOCK
+
+- id: RULE-202
+  type: payload
+  pattern: metsrv
+  action: BLOCK
+
+- id: RULE-203
+  type: payload
+  pattern: stdapi
+  action: BLOCK
+
+- id: RULE-204
+  type: payload
+  pattern: powershell
+  action: LOG
+
+- id: RULE-205
+  type: payload
+  pattern: System.Net.WebClient
+  action: BLOCK
+
+- id: RULE-206
+  type: payload
+  pattern: DownloadString(
+  action: BLOCK
+
+- id: RULE-207
+  type: payload
+  pattern: PSEXESVC
+  action: BLOCK
+
+- id: RULE-208
+  type: payload
+  pattern: RemComSvc
+  action: BLOCK
+
+- id: RULE-209
+  type: payload
+  pattern: Win32_Process Create
+  action: LOG
+
+- id: RULE-210
+  type: payload
+  pattern: WSMAN
+  action: LOG
+
+- id: RULE-211
+  type: payload
+  pattern: NT_STATUS_WRONG_PASSWORD
+  action: LOG
+
+- id: RULE-212
+  type: payload
+  pattern: STATUS_LOGON_FAILURE
+  action: LOG
+
+- id: RULE-213
+  type: payload
+  pattern: KRB5KDC_ERR_PREAUTH_FAILED
+  action: LOG
+
+- id: RULE-214
+  type: payload
+  pattern: /wp-login.php
+  action: LOG
+
+- id: RULE-215
+  type: http_url
+  pattern: /xmlrpc.php
+  action: LOG
+
+- id: RULE-216
+  type: payload
+  pattern: Content-Length: [1-9][0-9]{6,}
+  regex: true
+  action: LOG
+
+- id: RULE-217
+  type: payload
+  pattern: filename=.*\.(zip|7z|rar|tar|gz)
+  regex: true
+  action: LOG
+
+- id: RULE-218
+  type: payload
+  pattern: -----BEGIN RSA PRIVATE KEY-----
+  action: BLOCK
+
+- id: RULE-219
+  type: payload
+  pattern: ntds.dit
+  action: BLOCK
+
+- id: RULE-220
+  type: payload
+  pattern: sam.hive
+  action: BLOCK

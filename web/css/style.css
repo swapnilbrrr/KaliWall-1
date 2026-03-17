@@ -147,6 +147,14 @@ body {
     letter-spacing: -0.5px;
 }
 
+.sidebar-title .brand-kali {
+    color: #ef4444;
+}
+
+.sidebar-title .brand-wall {
+    color: #ffffff;
+}
+
 .sidebar-nav {
     flex: 1;
     padding: 16px 12px;
@@ -331,11 +339,13 @@ body {
     width: 100%;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    min-width: 0;
 }
 
 .page {
     display: none;
     animation: fadeIn 0.3s ease-out;
+    min-width: 0;
 }
 
 @keyframes fadeIn {
@@ -408,6 +418,8 @@ body {
     justify-content: space-between;
     align-items: center;
     margin-bottom: 24px;
+    gap: 12px;
+    flex-wrap: wrap;
 }
 
 .page-toolbar h2 {
@@ -568,6 +580,14 @@ body {
 
 .card-body {
     padding: 24px;
+    min-width: 0;
+}
+
+.toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
 }
 
 /* ---------- System Banner ---------- */
@@ -683,6 +703,7 @@ body {
     overflow-x: auto;
     width: 100%;
     -webkit-overflow-scrolling: touch;
+    max-width: 100%;
 }
 
 .table {
@@ -690,6 +711,21 @@ body {
     min-width: 720px;
     border-collapse: collapse;
     font-size: 0.95rem;
+}
+
+#visTopProtocols,
+#visPeersTable,
+#dashRecentLogs,
+#eventsTable,
+#dashConnections {
+    min-width: 600px;
+}
+
+.charts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 24px;
+    margin-bottom: 20px;
 }
 
 .dashboard-table-wrap {
@@ -1239,6 +1275,12 @@ body {
         padding: 0 16px;
     }
 
+    .topbar-actions {
+        gap: 8px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+
     .page-toolbar {
         flex-wrap: wrap;
         gap: 10px;
@@ -1272,6 +1314,18 @@ body {
 
     .dashboard-table-wrap .table {
         min-width: 480px;
+    }
+
+    #visTopProtocols,
+    #visPeersTable,
+    #dashRecentLogs,
+    #eventsTable,
+    #dashConnections {
+        min-width: 480px;
+    }
+
+    .topbar-badge {
+        display: none;
     }
 
     .system-banner {
