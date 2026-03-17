@@ -33,6 +33,7 @@ const (
 	logFile    = "logs/kaliwall.log"
 	dbFile     = "data/kaliwall.json"
 	defaultGeoDBFile = "GeoLite2-City.mmdb"
+	defaultGeoCSVFile = "IP2LOCATION-LITE-DB1.CSV"
 )
 
 func main() {
@@ -45,7 +46,7 @@ func main() {
 	dpiPromisc := flag.Bool("dpi-promisc", true, "Enable promiscuous capture mode for DPI")
 	dpiBPF := flag.String("dpi-bpf", "", "Optional BPF filter for DPI capture")
 	dpiRateLimit := flag.Int("dpi-rate", 5000, "Per-source packet rate limit per second")
-	geoDBPath := flag.String("geo-db", defaultGeoDBFile, "Path to MaxMind GeoLite2 City database (.mmdb)")
+	geoDBPath := flag.String("geo-db", defaultGeoDBFile, "Path to GeoIP database (.mmdb or IP2Location CSV)")
 	flag.Parse()
 
 	// If --daemon, fork to background
@@ -116,7 +117,7 @@ func main() {
 			fmt.Printf("[+] GeoIP enabled with DB: %s\n", resolvedGeoDBPath)
 		}
 	} else {
-		log.Printf("GeoIP disabled: %s not found. Set --geo-db <path> or KALIWALL_GEO_DB, or place DB in project root/data/configs.", defaultGeoDBFile)
+		log.Printf("GeoIP disabled: no database found. Set --geo-db <path> or KALIWALL_GEO_DB, or place %s / %s in project root/data/configs/internal/database.", defaultGeoDBFile, defaultGeoCSVFile)
 	}
 
 	var dpiPipe *pipeline.Pipeline
@@ -232,11 +233,19 @@ func resolveGeoDBPath(raw string) (string, bool) {
 		add(filepath.Join("data", defaultGeoDBFile))
 		add(filepath.Join("configs", defaultGeoDBFile))
 		add(filepath.Join("geoip", defaultGeoDBFile))
+		add(defaultGeoCSVFile)
+		add(filepath.Join("data", defaultGeoCSVFile))
+		add(filepath.Join("configs", defaultGeoCSVFile))
+		add(filepath.Join("internal", "database", defaultGeoCSVFile))
 		if exe, err := os.Executable(); err == nil {
 			dir := filepath.Dir(exe)
 			add(filepath.Join(dir, defaultGeoDBFile))
 			add(filepath.Join(dir, "data", defaultGeoDBFile))
 			add(filepath.Join(dir, "configs", defaultGeoDBFile))
+			add(filepath.Join(dir, defaultGeoCSVFile))
+			add(filepath.Join(dir, "data", defaultGeoCSVFile))
+			add(filepath.Join(dir, "configs", defaultGeoCSVFile))
+			add(filepath.Join(dir, "internal", "database", defaultGeoCSVFile))
 		}
 	}
 
