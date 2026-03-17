@@ -314,7 +314,13 @@
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ enabled: nextEnabled }),
             });
-            const data = await resp.json();
+            const raw = await resp.text();
+            let data;
+            try {
+                data = raw ? JSON.parse(raw) : {};
+            } catch (_err) {
+                throw new Error("DPI control endpoint returned non-JSON response. Restart server with latest build.");
+            }
             if (!data.success) {
                 throw new Error(data.message || "Failed to toggle DPI");
             }
