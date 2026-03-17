@@ -99,12 +99,20 @@ func main() {
 	analyticsService.Start()
 
 	var geoSvc *geoip.Service
-	if resolvedGeoDBPath, ok := resolveGeoDBPath(*geoDBPath); ok {
+	geoDBRequestedPath := strings.TrimSpace(*geoDBPath)
+	if savedGeoDBPath, ok := db.GetSetting("geo_db_path"); ok {
+		savedGeoDBPath = strings.TrimSpace(savedGeoDBPath)
+		if savedGeoDBPath != "" && (geoDBRequestedPath == "" || geoDBRequestedPath == defaultGeoDBFile) {
+			geoDBRequestedPath = savedGeoDBPath
+		}
+	}
+	if resolvedGeoDBPath, ok := resolveGeoDBPath(geoDBRequestedPath); ok {
 		if svc, err := geoip.New(resolvedGeoDBPath); err != nil {
 			log.Printf("GeoIP disabled (failed to load %s): %v", resolvedGeoDBPath, err)
 		} else {
 			geoSvc = svc
 			defer geoSvc.Close()
+			db.SetSetting("geo_db_path", resolvedGeoDBPath)
 			fmt.Printf("[+] GeoIP enabled with DB: %s\n", resolvedGeoDBPath)
 		}
 	} else {
