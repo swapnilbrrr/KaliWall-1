@@ -11,6 +11,21 @@
     var peerHostMap = {};
     var dpiRunning = false;
     const SIDEBAR_WIDTH_KEY = "kaliwall_sidebar_width";
+    const LOG_TABLE_SETTINGS_KEY = "kaliwall_log_table_settings";
+    var logTableSettings = {
+        density: "normal",
+        height: 600,
+        wrap: false,
+        dpiOnly: false,
+        columns: {
+            timestamp: true,
+            action: true,
+            src: true,
+            dst: true,
+            protocol: true,
+            detail: true,
+        },
+    };
 
     // ---------- Theme Management ----------
     const themeToggle = document.getElementById("themeToggle");
@@ -68,6 +83,7 @@
     // Initialize theme immediately
     initTheme();
     initSidebarWidthControls();
+    initLogTableControls();
 
     // ---------- Navigation ----------
 
@@ -535,17 +551,20 @@
     }
 
     function prependLogRow(entry, animate) {
+        if (logTableSettings.dpiOnly && !isDPILogEntry(entry)) {
+            return;
+        }
         var tbody = document.querySelector("#logsTable tbody");
         if (!tbody) return;
         var tr = document.createElement("tr");
         if (animate) tr.className = "log-new";
         tr.innerHTML =
-            "<td>" + formatTime(entry.timestamp) + "</td>" +
-            "<td>" + actionBadge(entry.action) + "</td>" +
-            "<td>" + escapeHtml(entry.src_ip) + "</td>" +
-            "<td>" + escapeHtml(entry.dst_ip) + "</td>" +
-            "<td>" + escapeHtml(entry.protocol) + "</td>" +
-            "<td>" + escapeHtml(entry.detail) + "</td>";
+            '<td class="col-timestamp">' + formatTime(entry.timestamp) + "</td>" +
+            '<td class="col-action">' + actionBadge(entry.action) + "</td>" +
+            '<td class="col-src">' + escapeHtml(entry.src_ip) + "</td>" +
+            '<td class="col-dst">' + escapeHtml(entry.dst_ip) + "</td>" +
+            '<td class="col-protocol">' + escapeHtml(entry.protocol) + "</td>" +
+            '<td class="col-detail">' + escapeHtml(entry.detail) + "</td>";
         tbody.insertBefore(tr, tbody.firstChild);
         // Trim excess rows
         while (tbody.children.length > maxLogRows) {
@@ -579,6 +598,112 @@
             });
         }
         startLogStream();
+    }
+
+    function isDPILogEntry(entry) {
+        if (!entry) return false;
+        var detail = String(entry.detail || "").toLowerCase();
+        return detail.indexOf("dpi:") === 0;
+    }
+
+    function initLogTableControls() {
+        loadLogTableSettings();
+        applyLogTableSettings();
+
+        var density = document.getElementById("logsDensitySelect");
+        var heightRange = document.getElementById("logsHeightRange");
+        var wrap = document.getElementById("logsWrapToggle");
+        var dpiOnly = document.getElementById("logsDPIOnlyToggle");
+        var columnsBtn = document.getElementById("btnToggleLogColumns");
+        var panel = document.getElementById("logsColumnsPanel");
+
+        if (density) {
+            density.value = logTableSettings.density;
+            density.addEventListener("change", function () {
+                logTableSettings.density = density.value;
+                persistAndApplyLogTableSettings();
+            });
+        }
+        if (heightRange) {
+            heightRange.value = String(logTableSettings.height);
+            heightRange.addEventListener("input", function () {
+                var v = parseInt(heightRange.value, 10) || 600;
+                logTableSettings.height = Math.max(260, Math.min(900, v));
+                persistAndApplyLogTableSettings();
+            });
+        }
+        if (wrap) {
+            wrap.checked = !!logTableSettings.wrap;
+            wrap.addEventListener("change", function () {
+                logTableSettings.wrap = !!wrap.checked;
+                persistAndApplyLogTableSettings();
+            });
+        }
+        if (dpiOnly) {
+            dpiOnly.checked = !!logTableSettings.dpiOnly;
+            dpiOnly.addEventListener("change", function () {
+                logTableSettings.dpiOnly = !!dpiOnly.checked;
+                persistAndApplyLogTableSettings();
+                loadLogs();
+            });
+        }
+        if (columnsBtn && panel) {
+            columnsBtn.addEventListener("click", function () {
+                panel.style.display = panel.style.display === "none" ? "flex" : "none";
+            });
+            panel.querySelectorAll("input[type=checkbox][data-col]").forEach(function (cb) {
+                var col = cb.getAttribute("data-col");
+                cb.checked = !!(logTableSettings.columns && logTableSettings.columns[col]);
+                cb.addEventListener("change", function () {
+                    logTableSettings.columns[col] = !!cb.checked;
+                    persistAndApplyLogTableSettings();
+                });
+            });
+        }
+    }
+
+    function loadLogTableSettings() {
+        try {
+            var raw = localStorage.getItem(LOG_TABLE_SETTINGS_KEY);
+            if (!raw) return;
+            var parsed = JSON.parse(raw);
+            if (!parsed || typeof parsed !== "object") return;
+            if (parsed.density) logTableSettings.density = parsed.density;
+            if (parsed.height) logTableSettings.height = parsed.height;
+            logTableSettings.wrap = !!parsed.wrap;
+            logTableSettings.dpiOnly = !!parsed.dpiOnly;
+            if (parsed.columns && typeof parsed.columns === "object") {
+                Object.keys(logTableSettings.columns).forEach(function (k) {
+                    if (Object.prototype.hasOwnProperty.call(parsed.columns, k)) {
+                        logTableSettings.columns[k] = !!parsed.columns[k];
+                    }
+                });
+            }
+        } catch (_err) {}
+    }
+
+    function persistAndApplyLogTableSettings() {
+        localStorage.setItem(LOG_TABLE_SETTINGS_KEY, JSON.stringify(logTableSettings));
+        applyLogTableSettings();
+    }
+
+    function applyLogTableSettings() {
+        var table = document.getElementById("logsTable");
+        var container = document.getElementById("logContainer");
+        var heightLabel = document.getElementById("logsHeightLabel");
+        if (!table || !container) return;
+
+        table.classList.remove("table-compact", "table-comfortable", "table-wrap-detail");
+        if (logTableSettings.density === "compact") table.classList.add("table-compact");
+        if (logTableSettings.density === "comfortable") table.classList.add("table-comfortable");
+        if (logTableSettings.wrap) table.classList.add("table-wrap-detail");
+
+        container.style.maxHeight = logTableSettings.height + "px";
+        if (heightLabel) heightLabel.textContent = logTableSettings.height + "px";
+
+        Object.keys(logTableSettings.columns).forEach(function (col) {
+            table.classList.toggle("hide-col-" + col, !logTableSettings.columns[col]);
+        });
     }
 
     // ---------- Firewall Events (SSE + Dashboard Cards) ----------

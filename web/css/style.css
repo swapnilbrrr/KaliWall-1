@@ -902,6 +902,91 @@ body {
     overflow-y: auto;
 }
 
+.logs-toolbar-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg-body);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    padding: 6px 8px;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+}
+
+.logs-toolbar-group label {
+    font-weight: 600;
+}
+
+.logs-toolbar-group select,
+.logs-toolbar-group input[type="range"] {
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    background: var(--bg-white);
+    color: var(--text-primary);
+    padding: 4px 6px;
+}
+
+.logs-toolbar-group.logs-check {
+    border: none;
+    background: transparent;
+    padding: 0;
+    gap: 6px;
+}
+
+.logs-columns-panel {
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 10px 12px;
+    background: var(--bg-white);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+}
+
+.logs-columns-panel label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.84rem;
+    color: var(--text-secondary);
+}
+
+#logsTable.table-compact th,
+#logsTable.table-compact td {
+    padding: 8px 10px;
+    font-size: 0.82rem;
+}
+
+#logsTable.table-comfortable th,
+#logsTable.table-comfortable td {
+    padding: 18px 20px;
+    font-size: 1rem;
+}
+
+#logsTable .col-detail {
+    white-space: nowrap;
+    max-width: 560px;
+    text-overflow: ellipsis;
+    overflow: hidden;
+}
+
+#logsTable.table-wrap-detail .col-detail {
+    white-space: normal;
+    word-break: break-word;
+}
+
+#logsTable.hide-col-timestamp .col-timestamp,
+#logsTable.hide-col-action .col-action,
+#logsTable.hide-col-src .col-src,
+#logsTable.hide-col-dst .col-dst,
+#logsTable.hide-col-protocol .col-protocol,
+#logsTable.hide-col-detail .col-detail {
+    display: none;
+}
+
 .log-new {
     animation: highlightLog 2s ease-out;
 }

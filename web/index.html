@@ -508,6 +508,24 @@
                     <span class="live-indicator" id="liveIndicator">
                         <i class="fa-solid fa-circle live-dot"></i> LIVE
                     </span>
+                    <div class="logs-toolbar-group">
+                        <label for="logsDensitySelect">Size</label>
+                        <select id="logsDensitySelect">
+                            <option value="compact">Small</option>
+                            <option value="normal" selected>Normal</option>
+                            <option value="comfortable">Large</option>
+                        </select>
+                    </div>
+                    <div class="logs-toolbar-group">
+                        <label for="logsHeightRange">Height</label>
+                        <input type="range" id="logsHeightRange" min="260" max="900" step="20" value="600">
+                        <span class="badge badge-disabled" id="logsHeightLabel">600px</span>
+                    </div>
+                    <label class="logs-toolbar-group logs-check"><input type="checkbox" id="logsWrapToggle"> Wrap detail</label>
+                    <label class="logs-toolbar-group logs-check"><input type="checkbox" id="logsDPIOnlyToggle"> DPI only</label>
+                    <button class="btn btn-secondary" id="btnToggleLogColumns" title="Show or hide table columns">
+                        <i class="fa-solid fa-table-columns"></i> Columns
+                    </button>
                     <button class="btn btn-secondary" id="btnToggleLive" title="Pause/resume live feed">
                         <i class="fa-solid fa-pause" id="liveToggleIcon"></i> <span id="liveToggleText">Pause</span>
                     </button>
@@ -519,11 +537,19 @@
                     </button>
                 </div>
             </div>
+            <div class="logs-columns-panel" id="logsColumnsPanel" style="display:none">
+                <label><input type="checkbox" data-col="timestamp" checked> Time</label>
+                <label><input type="checkbox" data-col="action" checked> Action</label>
+                <label><input type="checkbox" data-col="src" checked> Source</label>
+                <label><input type="checkbox" data-col="dst" checked> Destination</label>
+                <label><input type="checkbox" data-col="protocol" checked> Protocol</label>
+                <label><input type="checkbox" data-col="detail" checked> Detail</label>
+            </div>
             <div class="card">
                 <div class="card-body table-responsive log-container" id="logContainer">
                     <table class="table" id="logsTable">
                         <thead>
-                            <tr><th>Timestamp</th><th>Action</th><th>Source IP</th><th>Dest IP</th><th>Protocol</th><th>Detail</th></tr>
+                            <tr><th class="col-timestamp">Timestamp</th><th class="col-action">Action</th><th class="col-src">Source IP</th><th class="col-dst">Dest IP</th><th class="col-protocol">Protocol</th><th class="col-detail">Detail</th></tr>
                         </thead>
                         <tbody></tbody>
                     </table>

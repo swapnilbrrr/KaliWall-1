@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 
 	"kaliwall/internal/dpi/rules"
 	"kaliwall/internal/dpi/types"
@@ -39,12 +40,13 @@ func (e *Engine) Handle(result types.InspectResult, decision rules.Decision) {
 		"signals":  result.Detections,
 	}
 	b, _ := json.Marshal(entry)
+	detail := buildDetail(result, decision)
 
 	switch decision.Action {
 	case types.ActionBlock:
 		log.Printf("DPI BLOCK %s", b)
 		if e.trafficLog != nil {
-			e.trafficLog.Log("BLOCK", result.Tuple.SrcIP, result.Tuple.DstIP, result.Tuple.Protocol, fmt.Sprintf("dpi:block:%s", decision.Reason))
+			e.trafficLog.Log("BLOCK", result.Tuple.SrcIP, result.Tuple.DstIP, result.Tuple.Protocol, "dpi:block:"+detail)
 			e.trafficLog.EmitFirewallEvent(models.FirewallEvent{
 				EventType: "blocked_packet",
 				Backend:   "dpi",
@@ -54,16 +56,82 @@ func (e *Engine) Handle(result types.InspectResult, decision rules.Decision) {
 				Protocol:  result.Tuple.Protocol,
 				SrcPort:   fmt.Sprintf("%d", result.Tuple.SrcPort),
 				DstPort:   fmt.Sprintf("%d", result.Tuple.DstPort),
-				Detail:    "dpi:" + decision.Reason,
+				Detail:    "dpi:" + detail,
 				Severity:  "critical",
 			})
 		}
 	case types.ActionLog:
 		log.Printf("DPI LOG %s", b)
 		if e.trafficLog != nil {
-			e.trafficLog.Log("LOG", result.Tuple.SrcIP, result.Tuple.DstIP, result.Tuple.Protocol, fmt.Sprintf("dpi:log:%s", decision.Reason))
+			e.trafficLog.Log("LOG", result.Tuple.SrcIP, result.Tuple.DstIP, result.Tuple.Protocol, "dpi:log:"+detail)
+			e.trafficLog.EmitFirewallEvent(models.FirewallEvent{
+				EventType: "dpi_decision",
+				Backend:   "dpi",
+				Action:    "LOG",
+				SrcIP:     result.Tuple.SrcIP,
+				DstIP:     result.Tuple.DstIP,
+				Protocol:  result.Tuple.Protocol,
+				SrcPort:   fmt.Sprintf("%d", result.Tuple.SrcPort),
+				DstPort:   fmt.Sprintf("%d", result.Tuple.DstPort),
+				Detail:    "dpi:" + detail,
+				Severity:  "warning",
+			})
 		}
 	default:
-		// Allow path intentionally has no side-effect logging to reduce hot-path overhead.
+		if e.trafficLog != nil {
+			e.trafficLog.Log("ALLOW", result.Tuple.SrcIP, result.Tuple.DstIP, result.Tuple.Protocol, "dpi:allow:"+detail)
+			e.trafficLog.EmitFirewallEvent(models.FirewallEvent{
+				EventType: "dpi_decision",
+				Backend:   "dpi",
+				Action:    "ALLOW",
+				SrcIP:     result.Tuple.SrcIP,
+				DstIP:     result.Tuple.DstIP,
+				Protocol:  result.Tuple.Protocol,
+				SrcPort:   fmt.Sprintf("%d", result.Tuple.SrcPort),
+				DstPort:   fmt.Sprintf("%d", result.Tuple.DstPort),
+				Detail:    "dpi:" + detail,
+				Severity:  "info",
+			})
+		}
 	}
+}
+
+func buildDetail(result types.InspectResult, decision rules.Decision) string {
+	parts := []string{
+		fmt.Sprintf("rule=%s", fallback(decision.RuleID, "-")),
+		fmt.Sprintf("type=%s", fallback(decision.Type, "-")),
+		fmt.Sprintf("reason=%s", fallback(decision.Reason, "no_reason")),
+		fmt.Sprintf("sport=%d", result.Tuple.SrcPort),
+		fmt.Sprintf("dport=%d", result.Tuple.DstPort),
+	}
+	if result.HTTPMethod != "" {
+		parts = append(parts, "http_method="+result.HTTPMethod)
+	}
+	if result.HTTPHost != "" {
+		parts = append(parts, "http_host="+result.HTTPHost)
+	}
+	if result.HTTPURL != "" {
+		parts = append(parts, "http_url="+result.HTTPURL)
+	}
+	if result.DNSDomain != "" {
+		parts = append(parts, "dns="+result.DNSDomain)
+	}
+	if result.TLSSNI != "" {
+		parts = append(parts, "sni="+result.TLSSNI)
+	}
+	if len(result.Detections) > 0 {
+		parts = append(parts, "signals="+strings.Join(result.Detections, ","))
+	}
+	out := strings.Join(parts, " ")
+	if len(out) > 420 {
+		return out[:420]
+	}
+	return out
+}
+
+func fallback(v, d string) string {
+	if strings.TrimSpace(v) == "" {
+		return d
+	}
+	return v
 }
