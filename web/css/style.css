@@ -538,6 +538,10 @@ body {
     gap: 24px;
 }
 
+#page-dashboard [data-dashboard-section="dashboard-events"].dashboard-grid {
+    grid-template-columns: 1fr;
+}
+
 .dashboard-grid > * {
     min-width: 0;
 }
@@ -719,6 +723,15 @@ body {
 #eventsTable,
 #dashConnections {
     min-width: 600px;
+}
+
+.dns-metrics-table {
+    min-width: 360px;
+    margin-bottom: 12px;
+}
+
+.dns-metrics-table td:last-child {
+    font-weight: 700;
 }
 
 .charts-grid {

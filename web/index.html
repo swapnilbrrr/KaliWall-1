@@ -99,10 +99,10 @@
                     <label for="dashboardAutoRefreshSec">Auto refresh</label>
                     <select id="dashboardAutoRefreshSec">
                         <option value="0">Off</option>
-                        <option value="5">5s</option>
-                        <option value="10" selected>10s</option>
-                        <option value="20">20s</option>
-                        <option value="30">30s</option>
+                        <option value="5">5 sec</option>
+                        <option value="10" selected>10 sec</option>
+                        <option value="20">20 sec</option>
+                        <option value="30">30 sec</option>
                     </select>
                 </div>
             </div>
@@ -345,13 +345,18 @@
                         <i class="fa-solid fa-globe"></i>
                         <h3>DNS Verification</h3>
                     </div>
-                    <div class="card-body">
-                        <div class="stats-grid compact-stats" style="margin-bottom:12px">
-                            <div class="stat-card compact"><div class="stat-info"><span class="stat-value" id="dnsLookupsTotal">0</span><span class="stat-label">Lookups</span></div></div>
-                            <div class="stat-card compact"><div class="stat-info"><span class="stat-value" id="dnsCacheHitRate">0%</span><span class="stat-label">Cache Hit Rate</span></div></div>
-                            <div class="stat-card compact"><div class="stat-info"><span class="stat-value" id="dnsVerifiedPTR">0</span><span class="stat-label">Verified PTR</span></div></div>
-                            <div class="stat-card compact"><div class="stat-info"><span class="stat-value" id="dnsUnresolved">0</span><span class="stat-label">Unresolved</span></div></div>
-                        </div>
+                    <div class="card-body table-responsive dashboard-table-wrap">
+                        <table class="table dns-metrics-table" id="dnsMetricsTable">
+                            <thead>
+                                <tr><th>Metric</th><th>Value</th></tr>
+                            </thead>
+                            <tbody>
+                                <tr><td>Lookups</td><td id="dnsLookupsTotal">0</td></tr>
+                                <tr><td>Cache Hit Rate</td><td id="dnsCacheHitRate">0%</td></tr>
+                                <tr><td>Verified PTR</td><td id="dnsVerifiedPTR">0</td></tr>
+                                <tr><td>Unresolved</td><td id="dnsUnresolved">0</td></tr>
+                            </tbody>
+                        </table>
                         <div class="toolbar-actions">
                             <button class="btn btn-secondary" id="btnRefreshDNSStats"><i class="fa-solid fa-arrows-rotate"></i> Refresh</button>
                             <button class="btn btn-secondary" id="btnClearDNSCache"><i class="fa-solid fa-broom"></i> Clear DNS Cache</button>
