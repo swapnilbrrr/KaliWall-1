@@ -251,7 +251,7 @@
 
 - id: RULE-172
   type: payload
-  pattern: ' or '1'='1
+  pattern: "' or '1'='1"
   action: BLOCK
 
 - id: RULE-173
@@ -271,17 +271,17 @@
 
 - id: RULE-176
   type: payload
-  pattern: javascript:
+  pattern: 'javascript:'
   action: LOG
 
 - id: RULE-177
   type: payload
-  pattern: () { :; }
+  pattern: '() { :; }'
   action: BLOCK
 
 - id: RULE-178
   type: payload
-  pattern: ${jndi:
+  pattern: '${jndi:'
   action: BLOCK
 
 - id: RULE-179
