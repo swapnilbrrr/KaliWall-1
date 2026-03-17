@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"kaliwall/internal/analytics"
+	"kaliwall/internal/dpi/pipeline"
 	"kaliwall/internal/firewall"
 	"kaliwall/internal/logger"
 	"kaliwall/internal/models"
@@ -16,11 +17,15 @@ import (
 	"kaliwall/internal/threatintel"
 )
 
+type dpiStatusProvider interface {
+	Status() pipeline.Status
+}
+
 // NewRouter creates the HTTP mux with all API routes and static file serving.
-func NewRouter(fw *firewall.Engine, tl *logger.TrafficLogger, ti *threatintel.Service, an *analytics.Service) http.Handler {
+func NewRouter(fw *firewall.Engine, tl *logger.TrafficLogger, ti *threatintel.Service, an *analytics.Service, dpi dpiStatusProvider) http.Handler {
 	mux := http.NewServeMux()
 
-	h := &handlers{fw: fw, logger: tl, threat: ti, analytics: an}
+	h := &handlers{fw: fw, logger: tl, threat: ti, analytics: an, dpi: dpi}
 
 	// REST API v1 endpoints
 	mux.HandleFunc("/api/v1/rules", h.handleRules)
@@ -49,12 +54,28 @@ func NewRouter(fw *firewall.Engine, tl *logger.TrafficLogger, ti *threatintel.Se
 	mux.HandleFunc("/api/v1/dns/stats", h.handleDNSStats)
 	mux.HandleFunc("/api/v1/dns/cache", h.handleDNSCache)
 	mux.HandleFunc("/api/v1/dns/refresh", h.handleDNSRefresh)
+	mux.HandleFunc("/api/v1/dpi/status", h.handleDPIStatus)
 
 	// Serve web UI from the "web" directory
 	fs := http.FileServer(http.Dir("web"))
 	mux.Handle("/", fs)
 
 	return mux
+}
+
+func (h *handlers) handleDPIStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	if h.dpi == nil {
+		respond(w, http.StatusOK, models.APIResponse{Success: true, Data: map[string]interface{}{
+			"enabled": false,
+			"running": false,
+		}})
+		return
+	}
+	respond(w, http.StatusOK, models.APIResponse{Success: true, Data: h.dpi.Status()})
 }
 
 // ---------- Firewall Engine & Visibility ----------
@@ -216,6 +237,7 @@ type handlers struct {
 	logger    *logger.TrafficLogger
 	threat    *threatintel.Service
 	analytics *analytics.Service
+	dpi       dpiStatusProvider
 }
 
 // ---------- Rules ----------

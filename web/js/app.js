@@ -9,6 +9,7 @@
     var firewallEventSource = null;
     var maxEventRows = 120;
     var peerHostMap = {};
+    const SIDEBAR_WIDTH_KEY = "kaliwall_sidebar_width";
 
     // ---------- Theme Management ----------
     const themeToggle = document.getElementById("themeToggle");
@@ -65,6 +66,7 @@
 
     // Initialize theme immediately
     initTheme();
+    initSidebarWidthControls();
 
     // ---------- Navigation ----------
 
@@ -120,6 +122,7 @@
             case "dashboard":
                 loadStats();
                 loadSysInfo();
+                loadDPIStatus();
                 loadTrafficVisibility();
                 loadDashboardLogs();
                 loadDashboardConnections();
@@ -244,6 +247,65 @@
                 "<td>" + (peer.count || 0) + "</td>";
             peersTbody.appendChild(tr);
         });
+    }
+
+    async function loadDPIStatus() {
+        const res = await apiFetch("/dpi/status");
+        if (!res.success) return;
+        const s = res.data || {};
+        const on = !!s.enabled && !!s.running;
+        setText("dpiStatusText", on ? "ON" : "OFF");
+        setText("dpiPacketsSeen", s.packets_seen || 0);
+        setText("dpiBlockedCount", s.blocked || 0);
+        setText("dpiLoggedCount", s.logged || 0);
+        setText("dpiDecodeErrors", s.decode_errors || 0);
+
+        setText("dpiIfaceBadge", "iface: " + (s.interface || "-"));
+        setText("dpiWorkersBadge", "workers: " + (s.workers || 0));
+        setText("dpiUptimeBadge", "uptime: " + formatDurationSeconds(s.uptime_sec || 0));
+
+        const statusEl = document.getElementById("dpiStatusText");
+        if (statusEl) statusEl.style.color = on ? "var(--color-success)" : "var(--color-danger)";
+    }
+
+    function initSidebarWidthControls() {
+        const slider = document.getElementById("sidebarWidthSlider");
+        const value = document.getElementById("sidebarWidthValue");
+        const reset = document.getElementById("btnResetSidebarWidth");
+        if (!slider || !value || !reset) return;
+
+        const saved = parseInt(localStorage.getItem(SIDEBAR_WIDTH_KEY) || "260", 10);
+        const width = isNaN(saved) ? 260 : Math.max(220, Math.min(380, saved));
+        slider.value = String(width);
+        applySidebarWidth(width);
+
+        slider.addEventListener("input", function () {
+            const w = parseInt(slider.value, 10) || 260;
+            applySidebarWidth(w);
+            localStorage.setItem(SIDEBAR_WIDTH_KEY, String(w));
+        });
+
+        reset.addEventListener("click", function () {
+            slider.value = "260";
+            applySidebarWidth(260);
+            localStorage.setItem(SIDEBAR_WIDTH_KEY, "260");
+            toast("Sidebar width reset", "success");
+        });
+    }
+
+    function applySidebarWidth(width) {
+        document.documentElement.style.setProperty("--sidebar-width", width + "px");
+        setText("sidebarWidthValue", width + "px");
+    }
+
+    function formatDurationSeconds(total) {
+        const sec = Math.max(0, Math.floor(total));
+        const h = Math.floor(sec / 3600);
+        const m = Math.floor((sec % 3600) / 60);
+        const s = sec % 60;
+        if (h > 0) return h + "h " + m + "m";
+        if (m > 0) return m + "m " + s + "s";
+        return s + "s";
     }
 
     async function refreshPeerHostMap() {
@@ -865,6 +927,7 @@
     document.getElementById("btnRefreshConn").addEventListener("click", () => loadConnections());
     document.getElementById("btnRefreshLogs").addEventListener("click", () => loadLogs());
     document.getElementById("btnRefreshDNSStats").addEventListener("click", () => loadDNSStats());
+    document.getElementById("btnRefreshDPIStatus").addEventListener("click", () => loadDPIStatus());
 
     document.getElementById("btnClearDNSCache").addEventListener("click", async function () {
         const res = await fetch(API + "/dns/cache", { method: "DELETE" });

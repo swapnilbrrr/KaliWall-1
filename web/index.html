@@ -89,6 +89,25 @@
                 <div class="sys-item"><i class="fa-solid fa-fire"></i> Engine: <span id="sysEngine">memory</span></div>
             </div>
 
+            <div class="card" style="margin-bottom:20px">
+                <div class="card-header"><i class="fa-solid fa-magnifying-glass-chart"></i><h3>DPI Monitor</h3></div>
+                <div class="card-body">
+                    <div class="stats-grid compact-stats" style="margin-bottom:12px">
+                        <div class="stat-card compact"><div class="stat-info"><span class="stat-value" id="dpiStatusText">OFF</span><span class="stat-label">Status</span></div></div>
+                        <div class="stat-card compact"><div class="stat-info"><span class="stat-value" id="dpiPacketsSeen">0</span><span class="stat-label">Packets Seen</span></div></div>
+                        <div class="stat-card compact"><div class="stat-info"><span class="stat-value" id="dpiBlockedCount">0</span><span class="stat-label">Blocked</span></div></div>
+                        <div class="stat-card compact"><div class="stat-info"><span class="stat-value" id="dpiLoggedCount">0</span><span class="stat-label">Logged</span></div></div>
+                        <div class="stat-card compact"><div class="stat-info"><span class="stat-value" id="dpiDecodeErrors">0</span><span class="stat-label">Decode Errors</span></div></div>
+                    </div>
+                    <div class="toolbar-actions">
+                        <span class="badge badge-disabled" id="dpiIfaceBadge">iface: -</span>
+                        <span class="badge badge-disabled" id="dpiWorkersBadge">workers: 0</span>
+                        <span class="badge badge-disabled" id="dpiUptimeBadge">uptime: 0s</span>
+                        <button class="btn btn-secondary" id="btnRefreshDPIStatus"><i class="fa-solid fa-arrows-rotate"></i> Refresh DPI</button>
+                    </div>
+                </div>
+            </div>
+
             <div class="dashboard-grid" style="margin-bottom:20px">
                 <div class="card">
                     <div class="card-header"><i class="fa-solid fa-radar"></i><h3>Traffic Visibility</h3></div>
@@ -515,6 +534,24 @@
         <section class="page" id="page-settings">
             <div class="page-toolbar">
                 <h2>Settings</h2>
+            </div>
+
+            <div class="card settings-card" style="margin-bottom:20px">
+                <div class="card-header">
+                    <i class="fa-solid fa-grip-lines-vertical"></i>
+                    <h3>Sidebar Width</h3>
+                </div>
+                <div class="card-body" style="padding:20px">
+                    <p class="settings-desc">Adjust the sidebar width. Your preference is saved in your browser.</p>
+                    <div class="form-group">
+                        <label for="sidebarWidthSlider">Sidebar Width</label>
+                        <div class="range-inline">
+                            <input type="range" id="sidebarWidthSlider" min="220" max="380" step="10" value="260">
+                            <span class="badge badge-enabled" id="sidebarWidthValue">260px</span>
+                            <button class="btn btn-secondary btn-sm" id="btnResetSidebarWidth"><i class="fa-solid fa-rotate-left"></i> Reset</button>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div class="card settings-card" style="margin-bottom:20px">

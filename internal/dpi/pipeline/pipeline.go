@@ -6,6 +6,7 @@ import (
 	"log"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/gopacket"
@@ -35,6 +36,23 @@ type Config struct {
 	RateLimitPerSec int
 }
 
+// Status provides runtime DPI health and throughput counters.
+type Status struct {
+	Enabled       bool    `json:"enabled"`
+	Running       bool    `json:"running"`
+	Interface     string  `json:"interface"`
+	Workers       int     `json:"workers"`
+	RulesLoaded   int     `json:"rules_loaded"`
+	UptimeSec     float64 `json:"uptime_sec"`
+	PacketsSeen   uint64  `json:"packets_seen"`
+	DecodeErrors  uint64  `json:"decode_errors"`
+	ReasmErrors   uint64  `json:"reassembly_errors"`
+	Allowed       uint64  `json:"allowed"`
+	Blocked       uint64  `json:"blocked"`
+	Logged        uint64  `json:"logged"`
+	RateLimited   uint64  `json:"rate_limited"`
+}
+
 // Pipeline wires the full DPI processing path.
 type Pipeline struct {
 	cfg        Config
@@ -49,6 +67,16 @@ type Pipeline struct {
 	inputCh chan gopacket.Packet
 	wg      sync.WaitGroup
 	stop    context.CancelFunc
+
+	startedAt    time.Time
+	running      atomic.Bool
+	packetsSeen  atomic.Uint64
+	decodeErrors atomic.Uint64
+	reasmErrors  atomic.Uint64
+	allowed      atomic.Uint64
+	blocked      atomic.Uint64
+	logged       atomic.Uint64
+	rateLimited  atomic.Uint64
 }
 
 func New(cfg Config, l *logger.TrafficLogger) (*Pipeline, error) {
@@ -101,6 +129,8 @@ func (p *Pipeline) Start(parent context.Context) error {
 	}
 	p.tracker.Start()
 	p.reassembler.Start()
+	p.startedAt = time.Now()
+	p.running.Store(true)
 
 	p.wg.Add(1)
 	go p.captureForwarder(ctx)
@@ -125,7 +155,31 @@ func (p *Pipeline) Stop() {
 	p.tracker.Stop()
 	p.reassembler.Stop()
 	p.wg.Wait()
+	p.running.Store(false)
 	log.Printf("DPI stopped")
+}
+
+// Status returns pipeline runtime metrics for API/dashboard.
+func (p *Pipeline) Status() Status {
+	uptime := 0.0
+	if !p.startedAt.IsZero() {
+		uptime = time.Since(p.startedAt).Seconds()
+	}
+	return Status{
+		Enabled:      true,
+		Running:      p.running.Load(),
+		Interface:    p.cfg.Interface,
+		Workers:      p.cfg.Workers,
+		RulesLoaded:  len(p.ruleEngine.Rules()),
+		UptimeSec:    uptime,
+		PacketsSeen:  p.packetsSeen.Load(),
+		DecodeErrors: p.decodeErrors.Load(),
+		ReasmErrors:  p.reasmErrors.Load(),
+		Allowed:      p.allowed.Load(),
+		Blocked:      p.blocked.Load(),
+		Logged:       p.logged.Load(),
+		RateLimited:  p.rateLimited.Load(),
+	}
 }
 
 func (p *Pipeline) captureForwarder(ctx context.Context) {
@@ -173,8 +227,10 @@ func (p *Pipeline) worker(ctx context.Context, id int) {
 			if !ok {
 				return
 			}
+			p.packetsSeen.Add(1)
 			decoded, err := p.decoder.Decode(pkt)
 			if err != nil {
+				p.decodeErrors.Add(1)
 				if err == types.ErrUnsupportedPacket || err == types.ErrMalformedPacket {
 					continue
 				}
@@ -182,6 +238,8 @@ func (p *Pipeline) worker(ctx context.Context, id int) {
 			}
 
 			if p.tracker.IsRateLimited(decoded.Tuple.SrcIP) {
+				p.rateLimited.Add(1)
+				p.blocked.Add(1)
 				res := types.InspectResult{Timestamp: decoded.Timestamp, Tuple: decoded.Tuple, Protocol: decoded.Tuple.Protocol, Detections: []string{"rate_limit"}}
 				p.actions.Handle(res, rules.Decision{Action: types.ActionBlock, Type: "rate_limit", Reason: "source rate exceeded"})
 				continue
@@ -190,6 +248,7 @@ func (p *Pipeline) worker(ctx context.Context, id int) {
 			p.tracker.Touch(decoded.Tuple, len(decoded.Payload))
 			payloads, err := p.reassembler.Process(decoded)
 			if err != nil {
+				p.reasmErrors.Add(1)
 				log.Printf("DPI worker=%d reassembly error: %v", id, err)
 				continue
 			}
@@ -197,6 +256,14 @@ func (p *Pipeline) worker(ctx context.Context, id int) {
 			for _, item := range payloads {
 				result := p.inspector.Inspect(item)
 				decision := p.ruleEngine.Evaluate(result)
+				switch decision.Action {
+				case types.ActionBlock:
+					p.blocked.Add(1)
+				case types.ActionLog:
+					p.logged.Add(1)
+				default:
+					p.allowed.Add(1)
+				}
 				p.actions.Handle(result, decision)
 			}
 		}

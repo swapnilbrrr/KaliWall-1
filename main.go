@@ -129,7 +129,7 @@ func main() {
 	}
 
 	// Initialize REST API and web server
-	handler := api.NewRouter(fw, trafficLogger, ti, analyticsService)
+	handler := api.NewRouter(fw, trafficLogger, ti, analyticsService, dpiPipe)
 
 	// Graceful shutdown on SIGINT/SIGTERM
 	stop := make(chan os.Signal, 1)

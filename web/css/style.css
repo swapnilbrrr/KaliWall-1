@@ -964,6 +964,18 @@ body {
     gap: 10px;
 }
 
+.range-inline {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.range-inline input[type="range"] {
+    flex: 1;
+    min-width: 180px;
+}
+
 .input-with-btn input {
     flex: 1;
 }
