@@ -652,7 +652,7 @@ body {
     gap: 26px;
 }
 
-#page-dashboard {
+#page-dashboard.page.active {
     display: flex;
     flex-direction: column;
 }
