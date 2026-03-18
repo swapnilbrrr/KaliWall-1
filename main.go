@@ -10,9 +10,8 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"syscall"
-	"time"
 	"strings"
+	"syscall"
 
 	"kaliwall/internal/analytics"
 	"kaliwall/internal/api"
