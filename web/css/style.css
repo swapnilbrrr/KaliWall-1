@@ -286,13 +286,21 @@ body {
 }
 
 .menu-toggle {
-    display: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     background: none;
     border: none;
     font-size: 1.4rem;
     color: var(--text-secondary);
     cursor: pointer;
     padding: 8px;
+    border-radius: 8px;
+}
+
+.menu-toggle:hover {
+    background: var(--bg-body);
+    color: var(--text-primary);
 }
 
 .page-title {
@@ -556,8 +564,7 @@ body {
 }
 
 .dashboard-nav {
-    position: sticky;
-    top: calc(var(--topbar-height) + 10px);
+    position: static;
     z-index: 25;
     display: flex;
     justify-content: flex-start;
@@ -570,6 +577,10 @@ body {
     background: linear-gradient(180deg, color-mix(in srgb, var(--bg-card) 96%, #fff 4%), var(--bg-card));
     backdrop-filter: blur(6px);
     box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06);
+}
+
+#visibilitySection {
+    display: none;
 }
 
 .dashboard-nav-links {
