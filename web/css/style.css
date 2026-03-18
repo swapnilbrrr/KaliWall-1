@@ -126,25 +126,18 @@ body {
 .sidebar-header {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 0 24px;
+    padding: 8px 14px;
     height: var(--topbar-height);
     border-bottom: 1px solid var(--border-sidebar);
 }
 
-.sidebar-logo-mark {
-    width: 34px;
-    height: 34px;
-    border-radius: 9px;
-    background: linear-gradient(135deg, #ef4444 0%, #1d4ed8 100%);
-    color: #fff;
-    font-size: 0.82rem;
-    font-weight: 800;
-    letter-spacing: 0.5px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    box-shadow: 0 8px 16px rgba(37, 99, 235, 0.28);
+.sidebar-brand-logo {
+    width: 100%;
+    max-width: 220px;
+    height: 48px;
+    object-fit: contain;
+    object-position: left center;
+    display: block;
 }
 
 .sidebar-title {
@@ -1502,6 +1495,15 @@ body {
 }
 
 @media (max-width: 640px) {
+    .sidebar-header {
+        padding: 8px 12px;
+    }
+
+    .sidebar-brand-logo {
+        max-width: 200px;
+        height: 44px;
+    }
+
     .table {
         min-width: 640px;
     }
