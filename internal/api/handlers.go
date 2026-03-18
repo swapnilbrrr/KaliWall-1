@@ -30,6 +30,10 @@ type dpiControlProvider interface {
 	SetEnabled(enabled bool) error
 }
 
+type dpiDetailedStatsProvider interface {
+	DetailedStats() interface{}
+}
+
 // DPIProvider provides synchronized access to an optional DPI pipeline.
 type DPIProvider struct {
 	mu       sync.RWMutex
@@ -82,6 +86,23 @@ func (p *DPIProvider) SetEnabled(enabled bool) error {
 	return ctrl.SetEnabled(enabled)
 }
 
+// DetailedStats returns provider-specific rich stats when available.
+func (p *DPIProvider) DetailedStats() (interface{}, bool) {
+	if p == nil {
+		return nil, false
+	}
+	p.mu.RLock()
+	provider := p.provider
+	p.mu.RUnlock()
+	if provider == nil {
+		return nil, false
+	}
+	if detailed, ok := provider.(dpiDetailedStatsProvider); ok {
+		return detailed.DetailedStats(), true
+	}
+	return nil, false
+}
+
 // NewRouter creates the HTTP mux with all API routes and static file serving.
 func NewRouter(fw *firewall.Engine, tl *logger.TrafficLogger, ti *threatintel.Service, an *analytics.Service, dpi *DPIProvider, geo *geoip.Service) http.Handler {
 	mux := http.NewServeMux()
@@ -116,6 +137,7 @@ func NewRouter(fw *firewall.Engine, tl *logger.TrafficLogger, ti *threatintel.Se
 	mux.HandleFunc("/api/v1/dns/cache", h.handleDNSCache)
 	mux.HandleFunc("/api/v1/dns/refresh", h.handleDNSRefresh)
 	mux.HandleFunc("/api/v1/dpi/status", h.handleDPIStatus)
+	mux.HandleFunc("/api/v1/dpi/stats", h.handleDPIStats)
 	mux.HandleFunc("/api/v1/dpi/control", h.handleDPIControl)
 	mux.HandleFunc("/api/v1/geo/attacks", h.handleGeoAttacks)
 	mux.HandleFunc("/api/v1/geo/stream", h.handleGeoStream)
@@ -167,6 +189,27 @@ func (h *handlers) handleDPIStatus(w http.ResponseWriter, r *http.Request) {
 			Message: "DPI pipeline unavailable",
 			Data:    pipeline.Status{Enabled: false, Running: false},
 		})
+		return
+	}
+	respond(w, http.StatusOK, models.APIResponse{Success: true, Data: status})
+}
+
+func (h *handlers) handleDPIStats(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	if h.dpi == nil {
+		respond(w, http.StatusServiceUnavailable, models.APIResponse{Success: false, Message: "DPI pipeline unavailable"})
+		return
+	}
+	if stats, ok := h.dpi.DetailedStats(); ok {
+		respond(w, http.StatusOK, models.APIResponse{Success: true, Data: stats})
+		return
+	}
+	status, ok := h.dpi.Status()
+	if !ok {
+		respond(w, http.StatusServiceUnavailable, models.APIResponse{Success: false, Message: "DPI pipeline unavailable"})
 		return
 	}
 	respond(w, http.StatusOK, models.APIResponse{Success: true, Data: status})

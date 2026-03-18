@@ -31,6 +31,9 @@ fi
 if [[ -n "${KALIWALL_DPI_INTERFACE:-}" ]]; then
     DPI_ARGS+=("--dpi-interface" "${KALIWALL_DPI_INTERFACE}")
 fi
+if [[ "${KALIWALL_DPI_LITE:-0}" == "1" ]]; then
+    DPI_ARGS+=("--dpi-lite")
+fi
 
 usage() {
     cat <<EOF

@@ -142,6 +142,26 @@ You can also confirm engine health via API:
 curl -s http://localhost:8080/api/v1/dpi/status
 ```
 
+### 🧪 Lightweight IDS/DPI Mode
+
+KaliWall includes a lightweight IDS/DPI module for fast protocol telemetry (HTTP, DNS, TLS):
+
+```bash
+./kaliwall --dpi --dpi-lite --dpi-interface eth0
+```
+
+Environment-based start via script:
+
+```bash
+KALIWALL_DPI_LITE=1 ./start.sh --foreground
+```
+
+Detailed protocol counters and last-seen artifacts are available at:
+
+```bash
+curl -s http://localhost:8080/api/v1/dpi/stats
+```
+
 <br/>
 
 ### 🖥️ UX and Tooling

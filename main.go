@@ -17,6 +17,7 @@ import (
 	"kaliwall/internal/analytics"
 	"kaliwall/internal/api"
 	"kaliwall/internal/database"
+	"kaliwall/internal/dpi/lite"
 	"kaliwall/internal/dpi/pipeline"
 	"kaliwall/internal/firewall"
 	"kaliwall/internal/geoip"
@@ -46,6 +47,7 @@ func main() {
 	dpiPromisc := flag.Bool("dpi-promisc", true, "Enable promiscuous capture mode for DPI")
 	dpiBPF := flag.String("dpi-bpf", "", "Optional BPF filter for DPI capture")
 	dpiRateLimit := flag.Int("dpi-rate", 5000, "Per-source packet rate limit per second")
+	dpiLite := flag.Bool("dpi-lite", false, "Use lightweight IDS/DPI engine (HTTP/DNS/TLS extraction + stats)")
 	geoDBPath := flag.String("geo-db", defaultGeoDBFile, "Path to GeoIP database (.mmdb or IP2Location CSV)")
 	flag.Parse()
 
@@ -120,31 +122,50 @@ func main() {
 		log.Printf("GeoIP disabled: no database found. Set --geo-db <path> or KALIWALL_GEO_DB, or place %s / %s in project root/data/configs/internal/database.", defaultGeoDBFile, defaultGeoCSVFile)
 	}
 
-	var dpiPipe *pipeline.Pipeline
+	type dpiRuntime interface {
+		SetEnabled(enabled bool) error
+		Status() pipeline.Status
+		Stop()
+	}
+
+	var dpiRuntimeMgr dpiRuntime
 	dpiProvider := api.NewDPIProvider(nil)
 	resolvedIface := *dpiIface
 	if resolvedIface == "" {
 		resolvedIface = defaultCaptureInterface()
 	}
-	dpiCfg := pipeline.Config{
-		Interface:       resolvedIface,
-		Promiscuous:     *dpiPromisc,
-		BPF:             *dpiBPF,
-		RulesPath:       *dpiRules,
-		Workers:         *dpiWorkers,
-		FlowTimeout:     2 * time.Minute,
-		CleanupInterval: 30 * time.Second,
-		MaxFlowBytes:    1 << 20,
-		MaxWindowBytes:  8192,
-		RateLimitPerSec: *dpiRateLimit,
+	if *dpiLite {
+		liteEngine := lite.New(lite.Config{
+			Interface:   resolvedIface,
+			Promiscuous: *dpiPromisc,
+			BPF:         *dpiBPF,
+			Workers:     *dpiWorkers,
+		}, trafficLogger)
+		dpiRuntimeMgr = liteEngine
+		dpiProvider.Set(liteEngine)
+		fmt.Printf("[+] DPI mode: lightweight IDS/DPI\n")
+	} else {
+		dpiCfg := pipeline.Config{
+			Interface:       resolvedIface,
+			Promiscuous:     *dpiPromisc,
+			BPF:             *dpiBPF,
+			RulesPath:       *dpiRules,
+			Workers:         *dpiWorkers,
+			FlowTimeout:     2 * time.Minute,
+			CleanupInterval: 30 * time.Second,
+			MaxFlowBytes:    1 << 20,
+			MaxWindowBytes:  8192,
+			RateLimitPerSec: *dpiRateLimit,
+		}
+		dpiManager := pipeline.NewManager(dpiCfg, trafficLogger)
+		dpiRuntimeMgr = dpiManager
+		dpiProvider.Set(dpiManager)
+		fmt.Printf("[+] DPI mode: full pipeline\n")
 	}
-	dpiManager := pipeline.NewManager(dpiCfg, trafficLogger)
-	dpiProvider.Set(dpiManager)
 	if *dpiEnable {
-		if err := dpiManager.SetEnabled(true); err != nil {
+		if err := dpiRuntimeMgr.SetEnabled(true); err != nil {
 			log.Printf("DPI requested but failed to start: %v", err)
 		} else {
-			dpiPipe = nil
 			fmt.Printf("[+] DPI enabled on interface: %s\n", resolvedIface)
 		}
 	}
@@ -168,10 +189,9 @@ func main() {
 
 	<-stop
 	fmt.Println("\n[*] Shutting down KaliWall daemon...")
-	if dpiPipe != nil {
-		dpiPipe.Stop()
+	if dpiRuntimeMgr != nil {
+		dpiRuntimeMgr.Stop()
 	}
-	dpiManager.Stop()
 	monitor.Stop()
 	analyticsService.Stop()
 	// Persist VT key
