@@ -18,6 +18,7 @@ import (
 	"kaliwall/internal/geoip"
 	"kaliwall/internal/logger"
 	"kaliwall/internal/models"
+	"kaliwall/internal/proxy"
 	"kaliwall/internal/sysinfo"
 	"kaliwall/internal/threatintel"
 )
@@ -36,6 +37,12 @@ type dpiDetailedStatsProvider interface {
 
 type dpiWorkersProvider interface {
 	SetWorkers(workers int) error
+}
+
+type maliciousDomainProxy interface {
+	DomainStats() proxy.DomainBlocklistStats
+	DomainList() []string
+	ReloadDomains() (int, error)
 }
 
 // DPIProvider provides synchronized access to an optional DPI pipeline.
@@ -126,10 +133,10 @@ func (p *DPIProvider) SetWorkers(workers int) error {
 }
 
 // NewRouter creates the HTTP mux with all API routes and static file serving.
-func NewRouter(fw *firewall.Engine, tl *logger.TrafficLogger, ti *threatintel.Service, an *analytics.Service, dpi *DPIProvider, geo *geoip.Service) http.Handler {
+func NewRouter(fw *firewall.Engine, tl *logger.TrafficLogger, ti *threatintel.Service, an *analytics.Service, dpi *DPIProvider, geo *geoip.Service, proxy maliciousDomainProxy) http.Handler {
 	mux := http.NewServeMux()
 
-	h := &handlers{fw: fw, logger: tl, threat: ti, analytics: an, dpi: dpi, geo: geo}
+	h := &handlers{fw: fw, logger: tl, threat: ti, analytics: an, dpi: dpi, geo: geo, proxy: proxy}
 
 	// REST API v1 endpoints
 	mux.HandleFunc("/api/v1/rules", h.handleRules)
@@ -164,6 +171,8 @@ func NewRouter(fw *firewall.Engine, tl *logger.TrafficLogger, ti *threatintel.Se
 	mux.HandleFunc("/api/v1/dpi/workers", h.handleDPIWorkers)
 	mux.HandleFunc("/api/v1/geo/attacks", h.handleGeoAttacks)
 	mux.HandleFunc("/api/v1/geo/stream", h.handleGeoStream)
+	mux.HandleFunc("/api/v1/proxy/malicious-domains", h.handleProxyMaliciousDomains)
+	mux.HandleFunc("/api/v1/proxy/malicious-domains/reload", h.handleProxyMaliciousDomainsReload)
 
 	// Serve web UI from the "web" directory
 	fs := http.FileServer(http.Dir("web"))
@@ -427,6 +436,42 @@ type handlers struct {
 	analytics *analytics.Service
 	dpi       *DPIProvider
 	geo       *geoip.Service
+	proxy     maliciousDomainProxy
+}
+
+func (h *handlers) handleProxyMaliciousDomains(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	if h.proxy == nil {
+		respond(w, http.StatusServiceUnavailable, models.APIResponse{Success: false, Message: "HTTP proxy is disabled"})
+		return
+	}
+	respond(w, http.StatusOK, models.APIResponse{Success: true, Data: map[string]interface{}{
+		"stats":   h.proxy.DomainStats(),
+		"domains": h.proxy.DomainList(),
+	}})
+}
+
+func (h *handlers) handleProxyMaliciousDomainsReload(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	if h.proxy == nil {
+		respond(w, http.StatusServiceUnavailable, models.APIResponse{Success: false, Message: "HTTP proxy is disabled"})
+		return
+	}
+	count, err := h.proxy.ReloadDomains()
+	if err != nil {
+		respond(w, http.StatusInternalServerError, models.APIResponse{Success: false, Message: err.Error()})
+		return
+	}
+	respond(w, http.StatusOK, models.APIResponse{Success: true, Message: "Malicious domain list reloaded", Data: map[string]interface{}{
+		"domain_count": count,
+		"stats":        h.proxy.DomainStats(),
+	}})
 }
 
 func (h *handlers) handleGeoAttacks(w http.ResponseWriter, r *http.Request) {

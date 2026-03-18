@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -12,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"kaliwall/internal/analytics"
 	"kaliwall/internal/api"
@@ -21,6 +23,7 @@ import (
 	"kaliwall/internal/geoip"
 	"kaliwall/internal/logger"
 	"kaliwall/internal/netmon"
+	"kaliwall/internal/proxy"
 	"kaliwall/internal/threatintel"
 
 	"github.com/google/gopacket/pcap"
@@ -28,9 +31,12 @@ import (
 
 const (
 	listenAddr = ":8080"
+	proxyListenAddr = ":8081"
 	logDir     = "logs"
 	logFile    = "logs/kaliwall.log"
+	proxyBlockLogFile = "logs/blocked_requests.jsonl"
 	dbFile     = "data/kaliwall.json"
+	defaultMaliciousDomainsFile = "malicious_domains.txt"
 	defaultGeoDBFile = "GeoLite2-City.mmdb"
 	defaultGeoCSVFile = "IP2LOCATION-LITE-DB1.CSV"
 )
@@ -47,6 +53,11 @@ func main() {
 	dpiRateLimit := flag.Int("dpi-rate", 5000, "Deprecated in lite mode; kept for CLI compatibility")
 	dpiLite := flag.Bool("dpi-lite", true, "Run lightweight IDS/DPI engine (HTTP/DNS/TLS + L3/L7 stats)")
 	geoDBPath := flag.String("geo-db", defaultGeoDBFile, "Path to GeoIP database (.mmdb or IP2Location CSV)")
+	httpProxyEnable := flag.Bool("http-proxy", true, "Enable HTTP forward proxy with malicious domain blocking")
+	httpProxyAddr := flag.String("http-proxy-addr", proxyListenAddr, "Address for HTTP proxy listener (e.g. :8081)")
+	maliciousDomainsPath := flag.String("malicious-domains", defaultMaliciousDomainsFile, "Path to malicious domains list file")
+	proxyBlockedLogPath := flag.String("http-proxy-blocklog", proxyBlockLogFile, "JSONL path for blocked HTTP requests")
+	proxyReloadInterval := flag.Duration("http-proxy-reload-interval", 10*time.Second, "Malicious domain list auto-reload interval")
 	flag.Parse()
 	_ = dpiRules
 	_ = dpiRateLimit
@@ -147,7 +158,29 @@ func main() {
 	}
 
 	// Initialize REST API and web server
-	handler := api.NewRouter(fw, trafficLogger, ti, analyticsService, dpiProvider, geoSvc)
+	var httpProxy *proxy.FirewallProxy
+	var proxyCancel context.CancelFunc
+	if *httpProxyEnable {
+		if err := ensureMaliciousDomainsFile(*maliciousDomainsPath); err != nil {
+			log.Fatalf("Failed to initialize malicious domain file: %v", err)
+		}
+		domainBlocklist, err := proxy.NewDomainBlocklist(*maliciousDomainsPath)
+		if err != nil {
+			log.Fatalf("Failed to load malicious domains: %v", err)
+		}
+		blockedEventLogger, err := proxy.NewBlockedEventLogger(*proxyBlockedLogPath)
+		if err != nil {
+			log.Fatalf("Failed to initialize blocked-event logger: %v", err)
+		}
+		defer blockedEventLogger.Close()
+
+		httpProxy = proxy.NewFirewallProxy(domainBlocklist, blockedEventLogger, trafficLogger, ti)
+		var proxyCtx context.Context
+		proxyCtx, proxyCancel = context.WithCancel(context.Background())
+		httpProxy.StartAutoReload(proxyCtx, *proxyReloadInterval)
+	}
+
+	handler := api.NewRouter(fw, trafficLogger, ti, analyticsService, dpiProvider, geoSvc, httpProxy)
 
 	// Graceful shutdown on SIGINT/SIGTERM
 	stop := make(chan os.Signal, 1)
@@ -156,6 +189,11 @@ func main() {
 	go func() {
 		fmt.Printf("\n[+] KaliWall web UI:  http://localhost%s\n", listenAddr)
 		fmt.Printf("[+] REST API base:   http://localhost%s/api/v1\n", listenAddr)
+		if httpProxy != nil {
+			fmt.Printf("[+] HTTP proxy:      http://localhost%s\n", *httpProxyAddr)
+			fmt.Printf("[+] Malicious list:  %s\n", *maliciousDomainsPath)
+			fmt.Printf("[+] Proxy block log: %s\n", *proxyBlockedLogPath)
+		}
 		fmt.Println("[+] Press Ctrl+C to stop the daemon.\n")
 
 		if err := http.ListenAndServe(listenAddr, handler); err != nil {
@@ -163,8 +201,19 @@ func main() {
 		}
 	}()
 
+	if httpProxy != nil {
+		go func() {
+			if err := http.ListenAndServe(*httpProxyAddr, httpProxy); err != nil {
+				log.Fatalf("HTTP proxy failed: %v", err)
+			}
+		}()
+	}
+
 	<-stop
 	fmt.Println("\n[*] Shutting down KaliWall daemon...")
+	if proxyCancel != nil {
+		proxyCancel()
+	}
 	liteEngine.Stop()
 	monitor.Stop()
 	analyticsService.Stop()
@@ -173,6 +222,28 @@ func main() {
 		db.SetSetting("vt_api_key", key)
 	}
 	trafficLogger.Log("SYSTEM", "-", "-", "-", "Daemon stopped")
+}
+
+func ensureMaliciousDomainsFile(path string) error {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return fmt.Errorf("malicious domains path cannot be empty")
+	}
+	if st, err := os.Stat(path); err == nil {
+		if st.IsDir() {
+			return fmt.Errorf("malicious domains path points to a directory: %s", path)
+		}
+		return nil
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	content := strings.Join([]string{
+		"# KaliWall malicious domains",
+		"# One domain per line. Lines starting with # are comments.",
+		"malware.example",
+		"phishing.example",
+	}, "\n") + "\n"
+	return os.WriteFile(path, []byte(content), 0640)
 }
 
 func defaultCaptureInterface() string {
