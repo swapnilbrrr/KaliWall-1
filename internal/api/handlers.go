@@ -43,6 +43,10 @@ type maliciousDomainProxy interface {
 	DomainStats() proxy.DomainBlocklistStats
 	DomainList() []string
 	ReloadDomains() (int, error)
+	AddDomain(domain string) (bool, string, error)
+	RemoveDomain(domain string) (bool, string, error)
+	IsDomainBlocked(domain string) bool
+	RecentBlockedEvents(limit int) []proxy.BlockedEvent
 }
 
 // DPIProvider provides synchronized access to an optional DPI pipeline.
@@ -173,6 +177,7 @@ func NewRouter(fw *firewall.Engine, tl *logger.TrafficLogger, ti *threatintel.Se
 	mux.HandleFunc("/api/v1/geo/stream", h.handleGeoStream)
 	mux.HandleFunc("/api/v1/proxy/malicious-domains", h.handleProxyMaliciousDomains)
 	mux.HandleFunc("/api/v1/proxy/malicious-domains/reload", h.handleProxyMaliciousDomainsReload)
+	mux.HandleFunc("/api/v1/proxy/blocked-events", h.handleProxyBlockedEvents)
 
 	// Serve web UI from the "web" directory
 	fs := http.FileServer(http.Dir("web"))
@@ -472,6 +477,24 @@ func (h *handlers) handleProxyMaliciousDomainsReload(w http.ResponseWriter, r *h
 		"domain_count": count,
 		"stats":        h.proxy.DomainStats(),
 	}})
+}
+
+func (h *handlers) handleProxyBlockedEvents(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	if h.proxy == nil {
+		respond(w, http.StatusServiceUnavailable, models.APIResponse{Success: false, Message: "HTTP proxy is disabled"})
+		return
+	}
+	limit := 200
+	if q := r.URL.Query().Get("limit"); q != "" {
+		if v, err := strconv.Atoi(q); err == nil && v > 0 && v <= 5000 {
+			limit = v
+		}
+	}
+	respond(w, http.StatusOK, models.APIResponse{Success: true, Data: h.proxy.RecentBlockedEvents(limit)})
 }
 
 func (h *handlers) handleGeoAttacks(w http.ResponseWriter, r *http.Request) {
@@ -887,7 +910,8 @@ func (h *handlers) handleBlockedIPByAddr(w http.ResponseWriter, r *http.Request)
 func (h *handlers) handleWebsiteBlocks(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		respond(w, http.StatusOK, models.APIResponse{Success: true, Data: h.fw.ListWebsiteBlocks()})
+		websites := h.fw.ListWebsiteBlocks()
+		respond(w, http.StatusOK, models.APIResponse{Success: true, Data: websites})
 	case http.MethodPost:
 		var body struct {
 			Domain string `json:"domain"`
@@ -902,7 +926,31 @@ func (h *handlers) handleWebsiteBlocks(w http.ResponseWriter, r *http.Request) {
 			respond(w, http.StatusBadRequest, models.APIResponse{Success: false, Message: err.Error()})
 			return
 		}
-		respond(w, http.StatusCreated, models.APIResponse{Success: true, Message: "Website blocked", Data: entry})
+		proxySynced := true
+		proxyMessage := ""
+		if h.proxy != nil {
+			if added, normalized, perr := h.proxy.AddDomain(body.Domain); perr != nil {
+				proxySynced = false
+				proxyMessage = perr.Error()
+			} else if !added {
+				proxyMessage = fmt.Sprintf("already present in proxy list as %s", normalized)
+			} else {
+				proxyMessage = fmt.Sprintf("added to proxy list as %s", normalized)
+			}
+		}
+		msg := "Website blocked"
+		if proxyMessage != "" {
+			msg = msg + " (" + proxyMessage + ")"
+		}
+		status := http.StatusCreated
+		if !proxySynced {
+			status = http.StatusAccepted
+		}
+		respond(w, status, models.APIResponse{Success: true, Message: msg, Data: map[string]interface{}{
+			"website":      entry,
+			"proxy_synced": proxySynced,
+		}})
+		return
 	default:
 		methodNotAllowed(w)
 	}
@@ -922,7 +970,27 @@ func (h *handlers) handleWebsiteBlockByDomain(w http.ResponseWriter, r *http.Req
 		respond(w, http.StatusNotFound, models.APIResponse{Success: false, Message: err.Error()})
 		return
 	}
-	respond(w, http.StatusOK, models.APIResponse{Success: true, Message: "Website unblocked"})
+	proxySynced := true
+	proxyMessage := ""
+	if h.proxy != nil {
+		if removed, normalized, perr := h.proxy.RemoveDomain(domain); perr != nil {
+			proxySynced = false
+			proxyMessage = perr.Error()
+		} else if !removed {
+			proxyMessage = fmt.Sprintf("not found in proxy list (normalized %s)", normalized)
+		} else {
+			proxyMessage = fmt.Sprintf("removed from proxy list (%s)", normalized)
+		}
+	}
+	msg := "Website unblocked"
+	if proxyMessage != "" {
+		msg = msg + " (" + proxyMessage + ")"
+	}
+	status := http.StatusOK
+	if !proxySynced {
+		status = http.StatusAccepted
+	}
+	respond(w, status, models.APIResponse{Success: true, Message: msg, Data: map[string]interface{}{"proxy_synced": proxySynced}})
 }
 
 // ---------- Analytics ----------

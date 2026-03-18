@@ -175,6 +175,14 @@ func main() {
 		defer blockedEventLogger.Close()
 
 		httpProxy = proxy.NewFirewallProxy(domainBlocklist, blockedEventLogger, trafficLogger, ti)
+		for _, entry := range fw.ListWebsiteBlocks() {
+			if strings.TrimSpace(entry.Domain) == "" {
+				continue
+			}
+			if _, _, err := httpProxy.AddDomain(entry.Domain); err != nil {
+				log.Printf("Failed to sync website block %s into proxy list: %v", entry.Domain, err)
+			}
+		}
 		var proxyCtx context.Context
 		proxyCtx, proxyCancel = context.WithCancel(context.Background())
 		httpProxy.StartAutoReload(proxyCtx, *proxyReloadInterval)

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -117,14 +118,111 @@ func (d *DomainBlocklist) IsBlocked(host string) bool {
 	if _, ok := d.domains[host]; ok {
 		return true
 	}
+	if _, ok := d.domains["*."+host]; ok {
+		return true
+	}
 	parts := strings.Split(host, ".")
 	for i := 1; i < len(parts)-1; i++ {
 		suffix := strings.Join(parts[i:], ".")
 		if _, ok := d.domains[suffix]; ok {
 			return true
 		}
+		if _, ok := d.domains["*."+suffix]; ok {
+			return true
+		}
 	}
 	return false
+}
+
+// AddDomain persists and loads a domain into the blocklist.
+func (d *DomainBlocklist) AddDomain(raw string) (bool, string, error) {
+	domain := normalizeDomain(raw)
+	if strings.HasPrefix(strings.TrimSpace(strings.ToLower(raw)), "*.") {
+		domain = "*." + domain
+	}
+	if domain == "" {
+		return false, "", fmt.Errorf("domain cannot be empty")
+	}
+
+	d.mu.RLock()
+	_, exists := d.domains[domain]
+	d.mu.RUnlock()
+	if exists {
+		return false, domain, nil
+	}
+
+	f, err := os.OpenFile(d.path, os.O_APPEND|os.O_WRONLY, 0640)
+	if err != nil {
+		return false, "", fmt.Errorf("open malicious domains file for append: %w", err)
+	}
+	defer f.Close()
+
+	if _, err := fmt.Fprintln(f, domain); err != nil {
+		return false, "", fmt.Errorf("append domain to malicious list: %w", err)
+	}
+	if _, err := d.Reload(); err != nil {
+		return false, "", err
+	}
+	return true, domain, nil
+}
+
+// RemoveDomain removes a domain from the persisted blocklist file.
+func (d *DomainBlocklist) RemoveDomain(raw string) (bool, string, error) {
+	domain := normalizeDomain(raw)
+	if strings.HasPrefix(strings.TrimSpace(strings.ToLower(raw)), "*.") {
+		domain = "*." + domain
+	}
+	if domain == "" {
+		return false, "", fmt.Errorf("domain cannot be empty")
+	}
+
+	src, err := os.Open(d.path)
+	if err != nil {
+		return false, "", fmt.Errorf("open malicious domains file for remove: %w", err)
+	}
+	defer src.Close()
+
+	tmpPath := filepath.Clean(d.path + ".tmp")
+	dst, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0640)
+	if err != nil {
+		return false, "", fmt.Errorf("create temporary malicious domains file: %w", err)
+	}
+
+	removed := false
+	scanner := bufio.NewScanner(src)
+	for scanner.Scan() {
+		line := scanner.Text()
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			if _, err := fmt.Fprintln(dst, line); err != nil {
+				dst.Close()
+				return false, "", fmt.Errorf("write preserved line: %w", err)
+			}
+			continue
+		}
+		if normalizeDomain(trimmed) == strings.TrimPrefix(domain, "*.") || trimmed == domain {
+			removed = true
+			continue
+		}
+		if _, err := fmt.Fprintln(dst, line); err != nil {
+			dst.Close()
+			return false, "", fmt.Errorf("write domain line: %w", err)
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		dst.Close()
+		return false, "", fmt.Errorf("scan malicious domains file: %w", err)
+	}
+	if err := dst.Close(); err != nil {
+		return false, "", fmt.Errorf("close temporary malicious domains file: %w", err)
+	}
+	if err := os.Rename(tmpPath, d.path); err != nil {
+		return false, "", fmt.Errorf("replace malicious domains file: %w", err)
+	}
+	if _, err := d.Reload(); err != nil {
+		return false, "", err
+	}
+	return removed, domain, nil
 }
 
 // List returns the sorted set of blocked domains.
@@ -160,6 +258,7 @@ func (d *DomainBlocklist) Stats() DomainBlocklistStats {
 
 func normalizeDomain(raw string) string {
 	d := strings.TrimSpace(strings.ToLower(raw))
+	d = strings.TrimPrefix(d, "*.")
 	d = strings.TrimPrefix(d, "http://")
 	d = strings.TrimPrefix(d, "https://")
 	if idx := strings.IndexByte(d, '/'); idx >= 0 {

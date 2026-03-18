@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -36,8 +37,9 @@ type BlockedEvent struct {
 
 // BlockedEventLogger appends blocked events as JSON lines.
 type BlockedEventLogger struct {
-	mu   sync.Mutex
-	file *os.File
+	mu      sync.Mutex
+	file    *os.File
+	entries []BlockedEvent
 }
 
 // NewBlockedEventLogger creates/open log file used for blocked request events.
@@ -49,7 +51,7 @@ func NewBlockedEventLogger(path string) (*BlockedEventLogger, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open blocked event log: %w", err)
 	}
-	return &BlockedEventLogger{file: f}, nil
+	return &BlockedEventLogger{file: f, entries: make([]BlockedEvent, 0, 4096)}, nil
 }
 
 // Close closes the underlying file handle.
@@ -71,7 +73,24 @@ func (l *BlockedEventLogger) Log(ev BlockedEvent) error {
 	if _, err := fmt.Fprintf(l.file, "%s\n", line); err != nil {
 		return fmt.Errorf("write blocked event: %w", err)
 	}
+	if len(l.entries) >= 10000 {
+		l.entries = l.entries[1:]
+	}
+	l.entries = append(l.entries, ev)
 	return nil
+}
+
+// Recent returns newest blocked events.
+func (l *BlockedEventLogger) Recent(limit int) []BlockedEvent {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if limit <= 0 || limit > len(l.entries) {
+		limit = len(l.entries)
+	}
+	start := len(l.entries) - limit
+	out := make([]BlockedEvent, limit)
+	copy(out, l.entries[start:])
+	return out
 }
 
 // FirewallProxy is an HTTP forward proxy with domain-based blocking.
@@ -119,6 +138,29 @@ func (p *FirewallProxy) ReloadDomains() (int, error) {
 	return p.blocklist.Reload()
 }
 
+// AddDomain adds a blocked domain into the runtime and persisted list.
+func (p *FirewallProxy) AddDomain(domain string) (bool, string, error) {
+	return p.blocklist.AddDomain(domain)
+}
+
+// RemoveDomain removes a blocked domain from runtime and persisted list.
+func (p *FirewallProxy) RemoveDomain(domain string) (bool, string, error) {
+	return p.blocklist.RemoveDomain(domain)
+}
+
+// IsDomainBlocked reports whether domain is blocked by proxy list.
+func (p *FirewallProxy) IsDomainBlocked(domain string) bool {
+	return p.blocklist.IsBlocked(domain)
+}
+
+// RecentBlockedEvents returns newest blocked request events.
+func (p *FirewallProxy) RecentBlockedEvents(limit int) []BlockedEvent {
+	if p.events == nil {
+		return nil
+	}
+	return p.events.Recent(limit)
+}
+
 // StartAutoReload keeps the blocklist in sync with file changes.
 func (p *FirewallProxy) StartAutoReload(ctx context.Context, interval time.Duration) {
 	if interval <= 0 {
@@ -150,7 +192,7 @@ func (p *FirewallProxy) StartAutoReload(ctx context.Context, interval time.Durat
 // ServeHTTP handles proxied requests with domain blocking.
 func (p *FirewallProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodConnect {
-		http.Error(w, "CONNECT not supported by this proxy", http.StatusNotImplemented)
+		p.handleConnect(w, r)
 		return
 	}
 
@@ -188,6 +230,57 @@ func (p *FirewallProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if p.logger != nil {
 		p.logger.Log("ALLOW", clientIP(r), host, "HTTP", fmt.Sprintf("proxied %s %s", r.Method, r.URL.Path))
+	}
+}
+
+func (p *FirewallProxy) handleConnect(w http.ResponseWriter, r *http.Request) {
+	hostOnly := targetHost(r)
+	if hostOnly == "" {
+		http.Error(w, "Bad request: missing target host", http.StatusBadRequest)
+		return
+	}
+	if p.blocklist.IsBlocked(hostOnly) {
+		p.blockRequest(w, r, hostOnly)
+		return
+	}
+
+	address := strings.TrimSpace(r.Host)
+	if address == "" {
+		address = hostOnly + ":443"
+	} else if _, _, err := net.SplitHostPort(address); err != nil {
+		address = address + ":443"
+	}
+
+	targetConn, err := net.DialTimeout("tcp", address, 20*time.Second)
+	if err != nil {
+		http.Error(w, "Tunnel upstream failed", http.StatusBadGateway)
+		if p.logger != nil {
+			p.logger.Log("ERROR", clientIP(r), hostOnly, "HTTPS", fmt.Sprintf("connect dial failed: %v", err))
+		}
+		return
+	}
+
+	hijacker, ok := w.(http.Hijacker)
+	if !ok {
+		targetConn.Close()
+		http.Error(w, "Hijacking not supported", http.StatusInternalServerError)
+		return
+	}
+	clientConn, rw, err := hijacker.Hijack()
+	if err != nil {
+		targetConn.Close()
+		http.Error(w, "Tunnel setup failed", http.StatusInternalServerError)
+		return
+	}
+
+	_, _ = rw.WriteString("HTTP/1.1 200 Connection Established\r\n\r\n")
+	_ = rw.Flush()
+
+	go transferAndClose(targetConn, clientConn)
+	go transferAndClose(clientConn, targetConn)
+
+	if p.logger != nil {
+		p.logger.Log("ALLOW", clientIP(r), hostOnly, "HTTPS", "CONNECT tunnel established")
 	}
 }
 
@@ -277,6 +370,12 @@ func copyHeaders(dst, src http.Header) {
 			dst.Add(k, v)
 		}
 	}
+}
+
+func transferAndClose(dst net.Conn, src net.Conn) {
+	defer dst.Close()
+	defer src.Close()
+	_, _ = io.Copy(dst, bufio.NewReader(src))
 }
 
 func rawRequestURL(r *http.Request, host string) string {

@@ -2133,6 +2133,15 @@
     async function loadWebsites() {
         const res = await apiFetch("/websites");
         if (!res.success) return;
+        const eventRes = await apiFetch("/proxy/blocked-events?limit=2000");
+        const blockedDomains = [];
+        if (eventRes && eventRes.success && Array.isArray(eventRes.data)) {
+            eventRes.data.forEach(function (ev) {
+                const d = (ev && ev.domain ? String(ev.domain).toLowerCase() : "").trim();
+                if (!d) return;
+                blockedDomains.push(d);
+            });
+        }
         const tbody = document.querySelector("#websitesTable tbody");
         tbody.innerHTML = "";
         if (!res.data || res.data.length === 0) {
@@ -2140,10 +2149,18 @@
             return;
         }
         res.data.forEach(function (entry) {
+            const domain = (entry.domain || "").toLowerCase();
+            const hitCount = blockedDomains.reduce(function (acc, blockedDomain) {
+                if (blockedDomain === domain || blockedDomain.endsWith("." + domain)) {
+                    return acc + 1;
+                }
+                return acc;
+            }, 0);
+            const reason = (entry.reason || "-") + (hitCount > 0 ? (" | Block hits: " + hitCount) : " | Block hits: 0");
             const tr = document.createElement("tr");
             tr.innerHTML =
                 "<td><strong>" + escapeHtml(entry.domain) + "</strong></td>" +
-                "<td>" + escapeHtml(entry.reason || "-") + "</td>" +
+                "<td>" + escapeHtml(reason) + "</td>" +
                 "<td>" + formatTime(entry.created_at) + "</td>" +
                 '<td class="action-cell">' +
                     '<button class="btn btn-sm btn-secondary" onclick="KaliWall.unblockWebsite(\'' + escapeHtml(entry.domain) + '\')"><i class="fa-solid fa-unlock"></i> Unblock</button>' +
