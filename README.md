@@ -1,77 +1,145 @@
 <div align="center">
 
-# KaliWall
-### Linux Firewall Manager with Real-Time Dashboard and CLI
+<br/>
 
-[![Go Version](https://img.shields.io/github/go-mod/go-version/lamic/KaliWall?style=for-the-badge&logo=go&logoColor=white&color=00ADD8)](https://golang.org)
-[![License](https://img.shields.io/github/license/lamic/KaliWall?style=for-the-badge&color=1f6feb)](LICENSE)
-[![Platform](https://img.shields.io/badge/Platform-Linux-f08c00?style=for-the-badge&logo=linux&logoColor=white)](https://www.linux.org)
-[![Open Source](https://img.shields.io/badge/Open%20Source-Yes-2ea043?style=for-the-badge&logo=opensourceinitiative&logoColor=white)](https://opensource.org)
+<img src="kaliwall.png" alt="KaliWall Logo" width="680"/>
+
+<br/><br/>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Go-1.21+-00ADD8?style=for-the-badge&logo=go&logoColor=white&labelColor=0d1117"/>
+  &nbsp;
+  <img src="https://img.shields.io/badge/License-MIT-1f6feb?style=for-the-badge&logo=opensourceinitiative&logoColor=white&labelColor=0d1117"/>
+  &nbsp;
+  <img src="https://img.shields.io/badge/Platform-Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black&labelColor=0d1117"/>
+  &nbsp;
+  <img src="https://img.shields.io/badge/Open%20Source-Yes-2ea043?style=for-the-badge&logo=github&logoColor=white&labelColor=0d1117"/>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/iptables-supported-FF6B35?style=for-the-badge&logo=linux&logoColor=white&labelColor=0d1117"/>
+  &nbsp;
+  <img src="https://img.shields.io/badge/nftables-supported-7B2FBE?style=for-the-badge&logo=linux&logoColor=white&labelColor=0d1117"/>
+  &nbsp;
+  <img src="https://img.shields.io/badge/ufw-supported-0096FF?style=for-the-badge&logo=ubuntu&logoColor=white&labelColor=0d1117"/>
+  &nbsp;
+  <img src="https://img.shields.io/badge/VirusTotal-integrated-394EFF?style=for-the-badge&logo=virustotal&logoColor=white&labelColor=0d1117"/>
+</p>
 
 <br/>
 
-<img src="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExM3czamx6NDZ2YmV6YmR4aDV2a3ZnOGZ5d3JrdGdqaDIzbGZ5djJ6OSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/3o7bu3XilJ5BOiSGic/giphy.gif" alt="KaliWall dashboard preview" width="100%" style="border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.35);" />
+> **KaliWall** is a powerful open-source firewall platform for Linux.  
+> It combines **live firewall control**, **traffic visibility**, **GeoIP telemetry**,  
+> **threat intelligence**, and **DPI controls** through a sleek web dashboard and CLI.
 
 <br/>
 
-KaliWall is an open-source firewall platform for Linux. It combines live firewall control, traffic visibility, GeoIP telemetry, threat intelligence, and DPI controls through a web dashboard and CLI.
-
-[Quick Start](#quick-start) • [Features](#features) • [API](#api-highlights) • [Open Source](#open-source)
+[🚀 Quick Start](#-quick-start) · [✨ Features](#-features) · [🔌 API](#-api-highlights) · [🌱 Open Source](#-open-source)
 
 </div>
 
 ---
 
-## Features
+<br/>
 
-### Core Firewall
-- Rule lifecycle: create, update, validate, analyze, toggle, and delete rules.
-- Multi-backend support: `iptables`, `nftables`, `ufw`, or memory fallback mode.
-- Runtime backend switch via API/dashboard.
-- Safe default rule seeding on first run.
+## 🖥️ Dashboard Preview
 
-### Blocklists and Access Control
-- Block/unblock IP addresses with reasons and history.
-- Block/unblock websites/domains.
-- Persistent blocked entries via local database storage.
-
-### Monitoring and Visibility
-- Live traffic logs and streaming events (SSE).
-- Active connection visibility and system health stats.
-- Firewall event stream for near real-time UI updates.
-- DNS visibility with cache stats, manual refresh, and cache clear endpoint.
-
-### Analytics and Intelligence
-- Bandwidth and analytics metrics with stream endpoint.
-- VirusTotal integration for IP reputation lookups.
-- Threat cache listing and API key management.
-- GeoIP attack telemetry with stream support.
-
-### GeoIP Support
-- MaxMind `.mmdb` support (`GeoLite2-City.mmdb`).
-- IP2Location CSV support (`IP2LOCATION-LITE-DB1.CSV`).
-- Automatic Geo database path resolution and persistence.
-
-### DPI Pipeline
-- Optional DPI pipeline with runtime on/off controls.
-- Configurable interface, workers, BPF filter, promiscuous mode, and rate limiting.
-- DPI status endpoint for dashboard observability.
-
-### UX and Tooling
-- FortiGate-inspired web UI in plain HTML/CSS/JS.
-- Full CLI client for rules, blocklists, status, logs, threats, and connections.
-- Background daemon start support through startup script.
+<div align="center">
+  <img src="dashboard.png" alt="KaliWall Dashboard" width="90%"/>
+  <br/>
+  <sub>KaliWall Web Dashboard — running at <code>http://localhost:8080</code></sub>
+</div>
 
 ---
 
-## Quick Start
+<br/>
 
-### Prerequisites
-- Linux host (Ubuntu/Debian recommended).
-- Root privileges for live firewall backend operations.
-- Go toolchain (for source builds).
+## ✨ Features
 
-### Setup
+<br/>
+
+### 🔐 Core Firewall
+
+| Capability | Details |
+|---|---|
+| **Rule Lifecycle** | Create · Update · Validate · Analyze · Toggle · Delete |
+| **Backends** | `iptables` · `nftables` · `ufw` · Memory fallback |
+| **Runtime Switch** | Hot-swap backend via API or dashboard |
+| **Safe Defaults** | Automatic rule seeding on first run |
+
+<br/>
+
+### 🚫 Blocklists and Access Control
+
+- 🔴 Block / unblock **IP addresses** with reasons and full history
+- 🌐 Block / unblock **websites and domains**
+- 💾 Persistent blocked entries via local database storage
+
+<br/>
+
+### 📡 Monitoring and Visibility
+
+- 📊 **Live traffic logs** and streaming events via SSE
+- 🔗 **Active connection** visibility and system health stats
+- ⚡ Firewall **event stream** for near real-time UI updates
+- 🌍 **DNS visibility** with cache stats, manual refresh, and cache clear endpoint
+
+<br/>
+
+### 🧠 Analytics and Intelligence
+
+- 📈 Bandwidth and analytics metrics with **stream endpoint**
+- 🦠 **VirusTotal** integration for IP reputation lookups
+- 🗂️ Threat cache listing and API key management
+- 🗺️ **GeoIP attack telemetry** with stream support
+
+<br/>
+
+### 🌍 GeoIP Support
+
+```
+✅  MaxMind .mmdb        →  GeoLite2-City.mmdb
+✅  IP2Location CSV      →  IP2LOCATION-LITE-DB1.CSV
+✅  Auto path resolution →  No manual config needed
+```
+
+<br/>
+
+### 🔬 DPI Pipeline
+
+- 🔁 Optional DPI pipeline with **runtime on/off controls**
+- ⚙️ Configurable interface, workers, BPF filter, promiscuous mode, and rate limiting
+- 📍 DPI status endpoint for **dashboard observability**
+
+<br/>
+
+### 🖥️ UX and Tooling
+
+- 🎨 **FortiGate-inspired** web UI in plain HTML/CSS/JS
+- ⌨️ Full **CLI client** for rules, blocklists, status, logs, threats, and connections
+- 🌑 Background **daemon** start via startup script
+
+---
+
+<br/>
+
+## 🚀 Quick Start
+
+<br/>
+
+### 📋 Prerequisites
+
+<p>
+  <img src="https://img.shields.io/badge/OS-Ubuntu%20%2F%20Debian-E95420?style=flat-square&logo=ubuntu&logoColor=white&labelColor=0d1117"/>
+  &nbsp;
+  <img src="https://img.shields.io/badge/Privileges-Root%20Required-CC0000?style=flat-square&logo=linux&logoColor=white&labelColor=0d1117"/>
+  &nbsp;
+  <img src="https://img.shields.io/badge/Go-Toolchain%20Required-00ADD8?style=flat-square&logo=go&logoColor=white&labelColor=0d1117"/>
+</p>
+
+<br/>
+
+### ⚡ Setup
 
 ```bash
 git clone https://github.com/sujallamichhane18/KaliWall.git
@@ -79,71 +147,130 @@ cd KaliWall
 chmod +x setup.sh && ./setup.sh
 ```
 
-### Run
+<br/>
 
-Default background mode:
+### ▶️ Run
 
+**Background mode** *(default)*:
 ```bash
 chmod +x start.sh && ./start.sh
 ```
 
-Foreground mode:
-
+**Foreground mode**:
 ```bash
 ./start.sh --foreground
 ```
 
-Dashboard: `http://localhost:8080`
+<br/>
+
+<div align="center">
+  <img src="https://img.shields.io/badge/Dashboard%20→-localhost%3A8080-00D9FF?style=for-the-badge&logo=googlechrome&logoColor=white&labelColor=0d1117"/>
+</div>
 
 ---
 
-## API Highlights
+<br/>
 
-Base URL: `http://localhost:8080/api/v1`
+## 🔌 API Highlights
 
-- Rules: `/rules`, `/rules/{id}`, `/rules/validate`, `/rules/analyze`
-- Firewall engine: `/firewall/engine`, `/firewall/logs`
-- Traffic and logs: `/logs`, `/logs/stream`, `/events`, `/events/stream`, `/traffic/visibility`
-- Network/DNS: `/connections`, `/dns/stats`, `/dns/refresh`, `/dns/cache`
-- Threat intel: `/threat/apikey`, `/threat/check/{ip}`, `/threat/cache`
-- Analytics: `/analytics`, `/analytics/stream`
-- Geo: `/geo/attacks`, `/geo/stream`
-- DPI: `/dpi/status`, `/dpi/control`
-- Blocklists: `/blocked`, `/blocked/{ip}`, `/websites`, `/websites/{domain}`
+**Base URL:** `http://localhost:8080/api/v1`
+
+| Category | Endpoints |
+|---|---|
+| 📜 **Rules** | `/rules` · `/rules/{id}` · `/rules/validate` · `/rules/analyze` |
+| 🔥 **Firewall Engine** | `/firewall/engine` · `/firewall/logs` |
+| 📡 **Traffic & Logs** | `/logs` · `/logs/stream` · `/events` · `/events/stream` · `/traffic/visibility` |
+| 🌐 **Network / DNS** | `/connections` · `/dns/stats` · `/dns/refresh` · `/dns/cache` |
+| 🦠 **Threat Intel** | `/threat/apikey` · `/threat/check/{ip}` · `/threat/cache` |
+| 📊 **Analytics** | `/analytics` · `/analytics/stream` |
+| 🗺️ **GeoIP** | `/geo/attacks` · `/geo/stream` |
+| 🔬 **DPI** | `/dpi/status` · `/dpi/control` |
+| 🚫 **Blocklists** | `/blocked` · `/blocked/{ip}` · `/websites` · `/websites/{domain}` |
 
 ---
 
-## Configuration
+<br/>
 
-GeoIP files are auto-detected from common project paths. Supported files:
+## ⚙️ Configuration
 
-- `GeoLite2-City.mmdb`
-- `IP2LOCATION-LITE-DB1.CSV`
-
-You can also pass an explicit path with:
+```
+📁 GeoLite2-City.mmdb
+📁 IP2LOCATION-LITE-DB1.CSV
+```
 
 ```bash
 ./kaliwall --geo-db /path/to/GeoLite2-City.mmdb
-```
-
-or
-
-```bash
 ./kaliwall --geo-db /path/to/IP2LOCATION-LITE-DB1.CSV
 ```
 
 ---
 
-## Open Source
+<br/>
 
-KaliWall is an open-source project and welcomes contributions.
+## 🌱 Open Source
 
-- Report issues and feature requests in GitHub Issues.
-- Open pull requests for fixes, docs, and enhancements.
-- Keep changes focused and tested.
+<div align="center">
+  <img src="https://img.shields.io/badge/Contributions-Welcome-brightgreen?style=for-the-badge&logo=github&logoColor=white&labelColor=0d1117"/>
+  &nbsp;
+  <img src="https://img.shields.io/badge/Issues-Open-FF6B6B?style=for-the-badge&logo=github&logoColor=white&labelColor=0d1117"/>
+  &nbsp;
+  <img src="https://img.shields.io/badge/PRs-Welcome-4CAF50?style=for-the-badge&logo=git&logoColor=white&labelColor=0d1117"/>
+</div>
+
+<br/>
+
+- 🐛 **Report bugs** in [GitHub Issues](https://github.com/sujallamichhane18/KaliWall/issues)
+- 🔧 **Open pull requests** for fixes, docs, and enhancements
+- 🎯 Keep changes **focused** and **well-tested**
 
 ---
 
+<br/>
+
+## 🛠️ Built With
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Go-00ADD8?style=for-the-badge&logo=go&logoColor=white"/>
+  &nbsp;
+  <img src="https://img.shields.io/badge/Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black"/>
+  &nbsp;
+  <img src="https://img.shields.io/badge/HTML5-E34F26?style=for-the-badge&logo=html5&logoColor=white"/>
+  &nbsp;
+  <img src="https://img.shields.io/badge/CSS3-1572B6?style=for-the-badge&logo=css3&logoColor=white"/>
+  &nbsp;
+  <img src="https://img.shields.io/badge/JavaScript-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black"/>
+  &nbsp;
+  <img src="https://img.shields.io/badge/VirusTotal-394EFF?style=for-the-badge&logo=virustotal&logoColor=white"/>
+</p>
+
+---
+
+<br/>
+
 <div align="center">
-  <sub>Built for the open-source security community.</sub>
+
+<a href="https://github.com/sujallamichhane18/KaliWall/stargazers">
+  <img src="https://img.shields.io/github/stars/sujallamichhane18/KaliWall?style=social"/>
+</a>
+&nbsp;&nbsp;
+<a href="https://github.com/sujallamichhane18/KaliWall/network/members">
+  <img src="https://img.shields.io/github/forks/sujallamichhane18/KaliWall?style=social"/>
+</a>
+&nbsp;&nbsp;
+<a href="https://github.com/sujallamichhane18/KaliWall/watchers">
+  <img src="https://img.shields.io/github/watchers/sujallamichhane18/KaliWall?style=social"/>
+</a>
+
+<br/><br/>
+
+<sub>If KaliWall helped you, consider giving it a ⭐ — it means the world!</sub>
+
+<br/><br/>
+
+---
+
+<h3>Made with ❤️ by <a href="https://github.com/sujallamichhane18">Sujal Lamichhane</a></h3>
+
+<br/>
+
 </div>
